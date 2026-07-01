@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "job-scraper"
+version = "0.1.0"
+description = "Personal bioinformatics job search scraper"
+requires-python = ">=3.11"
+
+[tool.setuptools.packages.find]
+include = ["job_scraper*"]

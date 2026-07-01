@@ -1,0 +1,9 @@
+jobspy:
+  site_names: ["linkedin", "indeed", "zip_recruiter", "glassdoor", "google"]
+  search_terms:
+    - "bioinformatics scientist"
+    - "computational biologist"
+  locations:
+    - "United States"
+  results_wanted: 30
+  hours_old: 72

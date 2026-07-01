@@ -1,0 +1,53 @@
+include:
+  # Core role titles
+  - bioinformatics
+  - "computational biolog(?:y|ist)"  # matches computational biology/biologist
+  - "clinical bioinformatics"
+  - "genomics data scientist"
+  - "genomics data engineer"
+  # Domain/clinical NGS
+  - "hybrid capture"
+  - "targeted sequencing"
+  - "CNV calling"
+  - "fusion[- ]?(calling|detection)"
+  - translocation
+  - MSI
+  - TMB
+  - HRD
+  - "liquid biopsy"
+  - cfDNA
+  - FFPE
+  - "oncology NGS"
+  - "clinical genomics"
+  - "variant calling"
+  - "somatic variant"
+  - NGS
+  - "next[- ]generation sequencing"
+  - "single[- ]cell"
+  - transcriptomics
+  # Pipeline/infra
+  - "common workflow language"
+  - CWL
+  - Nextflow
+  - "AWS HealthOmics"
+  - "bioinformatics pipeline"
+  - "pipeline architect"
+  # Tools (recruiter/ATS keyword-matched)
+  - GATK
+  - Mutect2
+  - PureCN
+  - CNVkit
+  - BWA
+  - STAR
+  # Other domains
+  - microbiome
+  - metagenomics
+  - "comparative genomics"
+  - "antibiotic resistance"
+  - "experimental evolution"
+  - "regulatory genomics"
+  - "transcription factor binding"
+exclude:
+  - "data entry"
+match_fields: [title, description]
+case_sensitive: false
