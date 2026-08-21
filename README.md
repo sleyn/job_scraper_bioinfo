@@ -32,24 +32,32 @@ them later without rework.
    - `AIRFLOW_UID` — on macOS/Linux, run `id -u` and use that value.
    - `AIRFLOW_FERNET_KEY` — generate with
      `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
-3. Local dev setup (for running tests/scripts without Docker):
+   - `JOB_HELPER_MEMORY_PATH`, `JOB_HELPER_RESUME_PATH`, `JOB_HELPER_JD_SCORES_CSV` — only
+     needed if you run `job_scraper/scoring/*` (see "JD scoring" below).
+3. (Recommended) Install [direnv](https://direnv.net/) so `.env` loads automatically whenever you
+   `cd` into this repo, instead of relying on `uv run`'s auto-loading or manual `export`:
+   - `brew install direnv` (macOS), then add the hook to your shell rc file per direnv's docs
+     (e.g. `eval "$(direnv hook zsh)"` in `~/.zshrc`) — one-time, per-machine setup.
+   - Run `direnv allow` inside the repo to approve the checked-in `.envrc` (also required again
+     after any edit to `.envrc`).
+4. Local dev setup (for running tests/scripts without Docker):
    ```
    uv venv --python 3.12 .venv
    source .venv/bin/activate
    uv pip install -r requirements.txt -e .
    ```
-4. Run the test suite: `python -m pytest tests/`
-5. Verify the seed company list against the live Greenhouse API:
+5. Run the test suite: `python -m pytest tests/`
+6. Verify the seed company list against the live Greenhouse API:
    `python scripts/verify_companies.py` — fix or drop any rows that fail (see
    `config/companies.csv` notes for known-unverified entries).
-6. Start Airflow:
+7. Start Airflow:
    ```
    docker compose up -d airflow-init   # one-time: initializes metadata DB + admin user
    docker compose up -d                # starts webserver + scheduler
    ```
-7. Open `http://localhost:8080` (login `admin` / `admin`, set in `docker-compose.yaml`),
+8. Open `http://localhost:8080` (login `admin` / `admin`, set in `docker-compose.yaml`),
    find `bioinformatics_job_scrape`, unpause it, and trigger a manual run.
-8. Ongoing use: the DAG runs daily on its own. Query `data/jobs.db` directly anytime — no
+9. Ongoing use: the DAG runs daily on its own. Query `data/jobs.db` directly anytime — no
    need to open the Airflow UI day-to-day.
 
 ## Querying results
@@ -82,6 +90,28 @@ title + description). Changes only affect newly-ingested postings by default. To
 ```
 python -m job_scraper.filtering.backfill
 ```
+
+## JD scoring (optional)
+
+`job_scraper/scoring/` (embedding-based JD relevance scoring against your resume/history) reads
+`config/scoring.yaml` for the model and artifact paths, and reads its career-history reference
+data from three env vars pointing into the sibling `AI_Job_Helper` project — one per file, so this
+repo never depends on that project's layout:
+
+- `JOB_HELPER_MEMORY_PATH` — your career-history notes (required for scoring).
+- `JOB_HELPER_RESUME_PATH` — the resume JDs are compared against (required for scoring).
+- `JOB_HELPER_JD_SCORES_CSV` — the hand-scored JD CSV (only needed by `train_export.py`).
+
+Set them in `.env`, then get them into your shell one of these ways:
+
+- **direnv** (see Installation step 3): once hooked and `direnv allow`-ed, they load
+  automatically whenever you `cd` into the repo — nothing else to do.
+- **`uv run ...`**: loads `.env` automatically per-invocation (uv's built-in behavior), no direnv
+  needed.
+- **Manual fallback** (plain `python`/`marimo` without direnv or `uv run`):
+  ```
+  export $(grep -v '^#' .env | xargs)
+  ```
 
 ## Known limitations
 

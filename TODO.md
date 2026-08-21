@@ -13,11 +13,10 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
 - [ ] **Export production model artifacts.** `config/scoring/` (where `regressor.joblib` and
       `scaler.joblib` are expected) is currently empty — run
       `python -m job_scraper.scoring.train_export` against the hand-scored JD set to produce them.
-- [ ] **Split `AI_JOB_HELPER_ROOT` into per-file env vars.** `config/scoring.yaml` currently
-      derives `memory_path`/`resume_path`/training CSV path from one root env var. Replace with
-      three independent env vars (`JOB_HELPER_MEMORY_PATH`, `JOB_HELPER_RESUME_PATH`,
-      `JOB_HELPER_JD_SCORES_CSV`) so this repo never depends on `AI_Job_Helper`'s internal
-      directory layout — update `.env.example` and `config/scoring.yaml` together.
+- [ ] **Pass the career-history env vars into the Docker/Airflow scoring container.**
+      `JOB_HELPER_MEMORY_PATH`/`JOB_HELPER_RESUME_PATH`/`JOB_HELPER_JD_SCORES_CSV` now resolve
+      per-file, but `docker-compose.yaml` neither passes them through nor mounts the three files,
+      so scoring only works outside Docker (see `docs/adr/`).
 
 ## New ATS sources
 

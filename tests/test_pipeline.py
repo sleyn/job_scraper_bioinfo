@@ -8,23 +8,6 @@ from job_scraper.db.schema import get_connection, init_db
 from job_scraper.models import JobPosting
 from job_scraper.pipeline import score_pending_postings
 
-SCORING_YAML = """
-embedding_model: fake-model
-memory_path: /nonexistent/MEMORY.md
-resume_path: /nonexistent/resume.md
-reference_cache_path: data/scoring_reference_cache.npz
-regressor_path: config/scoring/regressor.joblib
-scaler_path: config/scoring/scaler.joblib
-"""
-
-
-@pytest.fixture
-def config_dir(tmp_path):
-    config_dir = tmp_path / "config"
-    config_dir.mkdir()
-    (config_dir / "scoring.yaml").write_text(SCORING_YAML)
-    return config_dir
-
 
 @pytest.fixture
 def db_path(tmp_path):

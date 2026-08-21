@@ -1,0 +1,15 @@
+# Config for job_scraper/scoring/embedding_scorer.py and train_export.py.
+#
+# The three career-history inputs (memory, resume, hand-scored training CSV) are NOT
+# configured here: they live outside this repo in the sibling AI_Job_Helper project, so
+# each is resolved from its own env var — JOB_HELPER_MEMORY_PATH, JOB_HELPER_RESUME_PATH
+# and JOB_HELPER_JD_SCORES_CSV (set them in .env, see .env.example). One var per file, so
+# this repo never has to know AI_Job_Helper's internal directory layout. If this pipeline
+# ever runs inside Docker (see docker-compose.yaml), those three files must each be
+# volume-mounted into the container or the scoring task will fail to find them.
+embedding_model: nomic-ai/nomic-embed-text-v1.5
+
+# Paths below are relative to the repo root (this file's parent directory's parent).
+reference_cache_path: data/scoring_reference_cache.npz
+regressor_path: config/scoring/regressor.joblib
+scaler_path: config/scoring/scaler.joblib

@@ -45,8 +45,10 @@ whole codebase.
 ```
 job_scraper/
   models.py              JobPosting dataclass — the common shape every source normalizes into
-  config.py               loaders for keywords.yaml / companies.csv / settings.yaml; compiles
-                           keyword regex with word boundaries (\b(?:pattern)\b)
+  config.py               loaders for keywords.yaml / companies.csv / settings.yaml / scoring.yaml;
+                           compiles keyword regex with word boundaries (\b(?:pattern)\b);
+                           load_scoring_config() resolves the three career-history paths from their
+                           own env vars (not from scoring.yaml), failing loudly if one is unset
   pipeline.py              run_source(source_type, config_dir, db_path) — fetch -> filter -> upsert,
                            the single entry point both the DAG and manual scripts call; per-company
                            fetch failures are caught and logged, not fatal to the whole task

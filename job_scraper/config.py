@@ -1,11 +1,30 @@
 from __future__ import annotations
 
 import csv
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+
+
+def _expand_path(raw: str) -> Path:
+    """Expand ~ and $ENV_VARS in a path string."""
+    return Path(os.path.expanduser(os.path.expandvars(raw)))
+
+
+def _required_env_path(var: str, points_at: str) -> Path:
+    """Read a required career-history path from its own env var, failing loudly here
+    rather than as a FileNotFoundError deep inside embedding_scorer.py. An empty value
+    counts as unset, since .env.example ships these vars blank for the user to fill in."""
+    raw = os.environ.get(var, "").strip()
+    if not raw:
+        raise KeyError(
+            f"{var} is not set. It must point at {points_at} "
+            f"(machine-specific, see .env.example)."
+        )
+    return _expand_path(raw)
 
 
 @dataclass
@@ -23,6 +42,17 @@ class KeywordConfig:
     include_patterns: list[re.Pattern]
     exclude_patterns: list[re.Pattern]
     match_fields: list[str]
+
+
+@dataclass
+class ScoringConfig:
+    embedding_model: str
+    memory_path: Path
+    resume_path: Path
+    reference_cache_path: Path
+    regressor_path: Path
+    scaler_path: Path
+    jd_scores_csv: Path | None
 
 
 def load_companies(config_dir: Path | str) -> list[CompanyEntry]:
@@ -65,3 +95,28 @@ def load_settings(config_dir: Path | str) -> dict:
     path = Path(config_dir) / "settings.yaml"
     with open(path) as f:
         return yaml.safe_load(f)
+
+
+def load_scoring_config(config_dir: Path | str) -> ScoringConfig:
+    config_dir = Path(config_dir)
+    path = config_dir / "scoring.yaml"
+    with open(path) as f:
+        raw = yaml.safe_load(f)
+
+    # YAML paths are relative to the repo root (config_dir's parent). The three
+    # career-history files live outside this repo (in AI_Job_Helper), so each is
+    # resolved from its own env var — this repo never assumes that project's layout.
+    repo_root = config_dir.parent
+    jd_scores_csv = os.environ.get("JOB_HELPER_JD_SCORES_CSV", "").strip()
+
+    return ScoringConfig(
+        embedding_model=raw["embedding_model"],
+        memory_path=_required_env_path(
+            "JOB_HELPER_MEMORY_PATH", "your career-history MEMORY.md"
+        ),
+        resume_path=_required_env_path("JOB_HELPER_RESUME_PATH", "your resume"),
+        reference_cache_path=repo_root / raw["reference_cache_path"],
+        regressor_path=repo_root / raw["regressor_path"],
+        scaler_path=repo_root / raw["scaler_path"],
+        jd_scores_csv=_expand_path(jd_scores_csv) if jd_scores_csv else None,
+    )
