@@ -4,6 +4,21 @@ Work intentionally deferred from the Greenhouse + JobSpy + SQLite + Airflow MVP,
 found (and documented, not fixed) during live verification. See `CLAUDE.md` for architecture
 and `README.md` "Known limitations" for user-facing notes on some of these.
 
+## Scoring
+
+`job_scraper/scoring/` (embedding-based fit scoring) is core scope now, not a deferred extra —
+see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — but the
+`ML_JD_scoring` branch's integration is unfinished:
+
+- [ ] **Export production model artifacts.** `config/scoring/` (where `regressor.joblib` and
+      `scaler.joblib` are expected) is currently empty — run
+      `python -m job_scraper.scoring.train_export` against the hand-scored JD set to produce them.
+- [ ] **Split `AI_JOB_HELPER_ROOT` into per-file env vars.** `config/scoring.yaml` currently
+      derives `memory_path`/`resume_path`/training CSV path from one root env var. Replace with
+      three independent env vars (`JOB_HELPER_MEMORY_PATH`, `JOB_HELPER_RESUME_PATH`,
+      `JOB_HELPER_JD_SCORES_CSV`) so this repo never depends on `AI_Job_Helper`'s internal
+      directory layout — update `.env.example` and `config/scoring.yaml` together.
+
 ## New ATS sources
 
 - [ ] **Lever scraper** (`job_scraper/ats/lever.py`). `GET https://api.lever.co/v0/postings/{company}?mode=json`.

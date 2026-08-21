@@ -2,7 +2,11 @@ from datetime import datetime, timezone
 
 import pytest
 
-from job_scraper.db.repository import upsert_postings
+from job_scraper.db.repository import (
+    get_postings_missing_score,
+    update_scores,
+    upsert_postings,
+)
 from job_scraper.db.schema import get_connection, init_db
 from job_scraper.models import JobPosting
 
@@ -68,3 +72,52 @@ def test_default_relevance_false_when_missing(db_path):
     row = conn.execute("SELECT * FROM job_postings WHERE url = ?", (posting.url,)).fetchone()
     conn.close()
     assert row["is_relevant"] == 0
+
+
+def test_newly_inserted_posting_has_no_score(db_path):
+    posting = _posting("https://example.com/3")
+    upsert_postings(db_path, [posting], {posting.url: True})
+
+    pending = get_postings_missing_score(db_path)
+    assert pending == {posting.url: posting.description}
+
+
+def test_update_scores_clears_pending_and_persists_value(db_path):
+    posting = _posting("https://example.com/4")
+    upsert_postings(db_path, [posting], {posting.url: True})
+
+    updated = update_scores(db_path, {posting.url: 0.75})
+    assert updated == 1
+    assert get_postings_missing_score(db_path) == {}
+
+    conn = get_connection(db_path)
+    row = conn.execute("SELECT score FROM job_postings WHERE url = ?", (posting.url,)).fetchone()
+    conn.close()
+    assert row["score"] == pytest.approx(0.75)
+
+
+def test_rescrape_does_not_clear_existing_score(db_path):
+    posting = _posting("https://example.com/5")
+    upsert_postings(db_path, [posting], {posting.url: True})
+    update_scores(db_path, {posting.url: 0.42})
+
+    rescraped = _posting("https://example.com/5", title="Updated Title")
+    upsert_postings(db_path, [rescraped], {rescraped.url: True})
+
+    conn = get_connection(db_path)
+    row = conn.execute("SELECT score FROM job_postings WHERE url = ?", (posting.url,)).fetchone()
+    conn.close()
+    assert row["score"] == pytest.approx(0.42)
+
+
+def test_pending_score_query_skips_irrelevant_postings(db_path):
+    relevant = _posting("https://example.com/6")
+    irrelevant = _posting("https://example.com/7", title="Sales Development Rep")
+    upsert_postings(
+        db_path,
+        [relevant, irrelevant],
+        {relevant.url: True, irrelevant.url: False},
+    )
+
+    pending = get_postings_missing_score(db_path)
+    assert pending == {relevant.url: relevant.description}

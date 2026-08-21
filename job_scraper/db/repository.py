@@ -75,6 +75,37 @@ def upsert_postings(
     )
 
 
+def get_postings_missing_score(db_path: str) -> dict[str, str]:
+    """Returns {url: description} for relevant postings that haven't been scored yet.
+
+    Scoring is the expensive second stage: only postings that passed the cheap keyword
+    pre-filter (is_relevant) are worth embedding, so the gating lives here rather than
+    in the caller."""
+    conn = get_connection(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT url, description FROM job_postings "
+            "WHERE score IS NULL AND is_relevant = 1"
+        ).fetchall()
+        return {row["url"]: row["description"] or "" for row in rows}
+    finally:
+        conn.close()
+
+
+def update_scores(db_path: str, scores: dict[str, float]) -> int:
+    """Writes posting.url -> score. Returns the number of rows updated."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.executemany(
+            "UPDATE job_postings SET score = :score WHERE url = :url",
+            [{"url": url, "score": score} for url, score in scores.items()],
+        )
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        conn.close()
+
+
 def record_run(
     db_path: str,
     source: str,
