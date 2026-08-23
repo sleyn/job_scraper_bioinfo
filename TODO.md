@@ -17,9 +17,25 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
       `docker-compose.yaml` bind-mounts MEMORY.md and the resume read-only at
       `/opt/airflow/career/` and overrides the two vars to those paths. `JOB_HELPER_JD_SCORES_CSV`
       is intentionally not passed in — only `train_export` needs it, and that runs on the host.
-- [ ] **Test `train_export.py`.** `tests/scoring/` covers `embedding_scorer` only. The
-      hand-scored CSV / jd.md-directory loading in `_load_training_data()` is the untested part
-      that has already produced one failure (rows whose `jd.md` is missing).
+- [x] **Test `train_export.py`.** `tests/scoring/test_train_export.py` covers the loader, the
+      tuning helpers and the export round-trip; the degenerate-trial guard in `_spearman_scorer`
+      was fixed in the process. See `.scratch/train-export-tests/`.
+- [ ] **Run the scoring stage under Airflow once.** Everything below the DAG is exercised —
+      the stage has been run end to end on a copy of the real `data/jobs.db` from a local venv —
+      but `score_postings_task` has never executed inside the container, so the HF cache mount
+      and the career-history bind mounts are verified by `docker compose config` only. Boot the
+      stack and trigger one run before trusting the daily schedule.
+- [ ] **Migrate the live `data/jobs.db`.** It predates the `score` column and has 627 postings,
+      338 of them relevant and unscored. `_ensure_score_column()` adds the column on the next
+      `init_db()`, verified on a copy — but until something runs, the live DB is pre-scoring.
+
+- [ ] **JobSpy LinkedIn returns no descriptions.** All 373 LinkedIn rows in `data/jobs.db`
+      have an empty `description`; Indeed and Greenhouse rows are fine. JobSpy needs
+      `linkedin_fetch_description=True` (an extra request per posting, so it is slow and
+      rate-limit-prone — check whether the run still fits the daily schedule). Until then
+      those postings are never scored: `get_postings_missing_score()` skips empty
+      descriptions rather than scoring the embedding of an empty string, so they sit at
+      `score IS NULL`. That is 166 of 338 otherwise-relevant postings unassessed.
 
 ## New ATS sources
 

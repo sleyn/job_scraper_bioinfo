@@ -28,11 +28,26 @@ def _load_embedding_model(model_name: str, revision: str | None = None) -> Sente
     return _model_cache[key]
 
 
-def _encode(model: SentenceTransformer, texts: list[str]) -> np.ndarray:
+def _encode(
+    model: SentenceTransformer, texts: list[str], batch_size: int = 8
+) -> np.ndarray:
+    """Embeds `texts`, capping how many are held on the accelerator at once.
+
+    Batch size is a memory knob, not a modelling one: attention cost grows with the
+    square of sequence length, and this model takes 8192 tokens, so a batch of long
+    postings is what exhausts a GPU rather than the number of postings overall. It does
+    not affect the vectors — batching only groups the same forward passes — so it is
+    safe to change without retraining. sentence-transformers' own default of 32 OOMs on
+    Apple MPS against real postings, which run to ~5k tokens.
+    """
     # Uniform "search_document:" prefix so JD, resume, and MEMORY.md section
     # embeddings all live in one consistent (symmetric-similarity) space.
     return np.asarray(
-        model.encode(["search_document: " + t for t in texts], normalize_embeddings=True)
+        model.encode(
+            ["search_document: " + t for t in texts],
+            normalize_embeddings=True,
+            batch_size=batch_size,
+        )
     )
 
 
@@ -62,8 +77,8 @@ def _load_reference_embeddings(
         if str(cached["key"]) == cache_key:
             return cached["job_history_emb"], cached["resume_emb"]
 
-    job_history_emb = _encode(model, mem_sections)
-    resume_emb = _encode(model, [resume_text])[0]
+    job_history_emb = _encode(model, mem_sections, cfg.embedding_batch_size)
+    resume_emb = _encode(model, [resume_text], cfg.embedding_batch_size)[0]
 
     cfg.reference_cache_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
@@ -82,7 +97,7 @@ def build_features(descriptions: list[str], cfg: ScoringConfig) -> np.ndarray:
     model = _load_embedding_model(cfg.embedding_model, cfg.embedding_model_revision)
     job_history_emb, resume_emb = _load_reference_embeddings(model, cfg)
 
-    jd_emb = _encode(model, descriptions)
+    jd_emb = _encode(model, descriptions, cfg.embedding_batch_size)
 
     # All embeddings are L2-normalized, so dot product == cosine similarity.
     job_history_sims = jd_emb @ job_history_emb.T  # (n_jd, n_sections)

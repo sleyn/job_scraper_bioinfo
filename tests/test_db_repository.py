@@ -18,13 +18,13 @@ def db_path(tmp_path):
     return path
 
 
-def _posting(url, title="Bioinformatics Scientist"):
+def _posting(url, title="Bioinformatics Scientist", description="desc"):
     return JobPosting(
         source="greenhouse",
         company="Acme",
         title=title,
         location="Remote",
-        description="desc",
+        description=description,
         url=url,
         posted_date=None,
         scraped_at=datetime.now(timezone.utc),
@@ -121,3 +121,20 @@ def test_pending_score_query_skips_irrelevant_postings(db_path):
 
     pending = get_postings_missing_score(db_path)
     assert pending == {relevant.url: relevant.description}
+
+
+def test_pending_score_query_skips_postings_with_no_description(db_path):
+    """An empty description embeds to an ordinary vector, so scoring one produces a
+    confident-looking number that means nothing. Real runs hit this hard: every JobSpy
+    LinkedIn posting arrives with no description."""
+    postings = [
+        _posting("https://example.com/described", description="Bioinformatics pipelines."),
+        _posting("https://example.com/empty", description=""),
+        _posting("https://example.com/whitespace", description="   \n  "),
+        _posting("https://example.com/null", description=None),
+    ]
+    upsert_postings(db_path, postings, {p.url: True for p in postings})
+
+    pending = get_postings_missing_score(db_path)
+
+    assert set(pending) == {"https://example.com/described"}

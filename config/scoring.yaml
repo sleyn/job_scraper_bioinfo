@@ -10,6 +10,13 @@
 # volume-mounted into the container or the scoring task will fail to find them.
 embedding_model: nomic-ai/nomic-embed-text-v1.5
 
+# How many texts are embedded at once. A memory knob only — it does not change the
+# vectors, so it can be tuned without retraining. Lower it if the scoring stage runs out
+# of GPU memory: real postings reach ~5k tokens, and cost grows with sequence length
+# squared, so a handful of long ones is what exhausts a device. 32 (the library default)
+# OOMs on Apple MPS against a real posting set.
+embedding_batch_size: 8
+
 # The exact Hub revision the exported regressor/scaler were fitted on. Without this, the
 # model name is a floating pointer: a new upstream revision would change the feature space
 # the artifacts expect, and nothing downstream would notice — scores would just quietly get

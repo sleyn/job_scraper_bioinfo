@@ -80,14 +80,23 @@ def get_postings_missing_score(db_path: str) -> dict[str, str]:
 
     Scoring is the expensive second stage: only postings that passed the cheap keyword
     pre-filter (is_relevant) are worth embedding, so the gating lives here rather than
-    in the caller."""
+    in the caller.
+
+    Postings with no description are excluded too. Embedding an empty string returns a
+    perfectly ordinary vector, so they would all be scored identically and the number
+    would look like a fit judgement rather than the absence of one. Leaving score NULL
+    says what is true: this posting has not been assessed. Every JobSpy LinkedIn row
+    lands here — that source returns no description at all (see TODO.md)."""
     conn = get_connection(db_path)
     try:
         rows = conn.execute(
             "SELECT url, description FROM job_postings "
-            "WHERE score IS NULL AND is_relevant = 1"
+            "WHERE score IS NULL AND is_relevant = 1 "
+            # SQLite's one-argument TRIM strips spaces only, so the character set is
+            # given explicitly: tab, newline and carriage return count as empty too.
+            "AND TRIM(COALESCE(description, ''), ' ' || char(9) || char(10) || char(13)) != ''"
         ).fetchall()
-        return {row["url"]: row["description"] or "" for row in rows}
+        return {row["url"]: row["description"] for row in rows}
     finally:
         conn.close()
 

@@ -55,6 +55,7 @@ class ScoringConfig:
     jd_scores_csv: Path | None
     jd_dir: Path | None = None
     embedding_model_revision: str | None = None
+    embedding_batch_size: int = 8
 
 
 def load_companies(config_dir: Path | str) -> list[CompanyEntry]:
@@ -129,4 +130,5 @@ def load_scoring_config(config_dir: Path | str) -> ScoringConfig:
         # Optional: absent means "whatever revision resolves", which is what the
         # exported regressor silently depends on if nobody pins it.
         embedding_model_revision=raw.get("embedding_model_revision"),
+        embedding_batch_size=raw.get("embedding_batch_size", 8),
     )
