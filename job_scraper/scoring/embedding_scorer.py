@@ -9,13 +9,23 @@ from sentence_transformers import SentenceTransformer
 
 from job_scraper.config import ScoringConfig
 
-_model_cache: dict[str, SentenceTransformer] = {}
+_model_cache: dict[tuple[str, str | None], SentenceTransformer] = {}
 
 
-def _load_embedding_model(model_name: str) -> SentenceTransformer:
-    if model_name not in _model_cache:
-        _model_cache[model_name] = SentenceTransformer(model_name, trust_remote_code=True)
-    return _model_cache[model_name]
+def _load_embedding_model(model_name: str, revision: str | None = None) -> SentenceTransformer:
+    """Loads the embedding model, pinned to `revision` when scoring.yaml declares one.
+
+    The revision matters more than it looks: the exported regressor and scaler are fitted
+    on this model's output, so a new upstream revision changes the feature space out from
+    under them with nothing in the pipeline to notice. Pinning makes that a deliberate
+    change. Cache key includes the revision so two pins never collide in one process.
+    """
+    key = (model_name, revision)
+    if key not in _model_cache:
+        _model_cache[key] = SentenceTransformer(
+            model_name, revision=revision, trust_remote_code=True
+        )
+    return _model_cache[key]
 
 
 def _encode(model: SentenceTransformer, texts: list[str]) -> np.ndarray:
@@ -69,7 +79,7 @@ def build_features(descriptions: list[str], cfg: ScoringConfig) -> np.ndarray:
     """Embeds `descriptions` and appends experience-fit features against MEMORY.md
     and the resume. Column layout: [768 embedding dims, fit_max, fit_top3, resume_cos] —
     must match the layout train_export.py fits the regressor/scaler on."""
-    model = _load_embedding_model(cfg.embedding_model)
+    model = _load_embedding_model(cfg.embedding_model, cfg.embedding_model_revision)
     job_history_emb, resume_emb = _load_reference_embeddings(model, cfg)
 
     jd_emb = _encode(model, descriptions)

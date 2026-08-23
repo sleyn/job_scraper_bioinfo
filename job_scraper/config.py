@@ -53,6 +53,7 @@ class ScoringConfig:
     regressor_path: Path
     scaler_path: Path
     jd_scores_csv: Path | None
+    embedding_model_revision: str | None = None
 
 
 def load_companies(config_dir: Path | str) -> list[CompanyEntry]:
@@ -119,4 +120,7 @@ def load_scoring_config(config_dir: Path | str) -> ScoringConfig:
         regressor_path=repo_root / raw["regressor_path"],
         scaler_path=repo_root / raw["scaler_path"],
         jd_scores_csv=_expand_path(jd_scores_csv) if jd_scores_csv else None,
+        # Optional: absent means "whatever revision resolves", which is what the
+        # exported regressor silently depends on if nobody pins it.
+        embedding_model_revision=raw.get("embedding_model_revision"),
     )

@@ -9,6 +9,14 @@
 # volume-mounted into the container or the scoring task will fail to find them.
 embedding_model: nomic-ai/nomic-embed-text-v1.5
 
+# The exact Hub revision the exported regressor/scaler were fitted on. Without this, the
+# model name is a floating pointer: a new upstream revision would change the feature space
+# the artifacts expect, and nothing downstream would notice — scores would just quietly get
+# worse. Re-pin this and re-run train_export.py together, never one without the other.
+# Custom architecture code (trust_remote_code) comes from nomic-ai/nomic-bert-2048, which
+# this does not pin; it is cached alongside the weights and HF_HUB_OFFLINE=1 keeps it fixed.
+embedding_model_revision: e9b6763023c676ca8431644204f50c2b100d9aab
+
 # Paths below are relative to the repo root (this file's parent directory's parent).
 reference_cache_path: data/scoring_reference_cache.npz
 regressor_path: config/scoring/regressor.joblib
