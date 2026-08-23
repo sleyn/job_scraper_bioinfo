@@ -75,3 +75,74 @@ def test_score_postings_maps_url_to_prediction(mock_encode, mock_load_model, moc
 
 def test_score_postings_empty_input_short_circuits(cfg):
     assert embedding_scorer.score_postings({}, cfg) == {}
+
+
+@patch("job_scraper.scoring.embedding_scorer._encode")
+def test_reference_embeddings_cached_on_second_call(mock_encode, cfg):
+    job_history_emb = np.array([[1.0, 0.0], [0.0, 1.0]])
+    resume_emb = np.array([[0.6, 0.8]])
+    mock_encode.side_effect = [job_history_emb, resume_emb]
+
+    first = embedding_scorer._load_reference_embeddings(object(), cfg)
+    assert cfg.reference_cache_path.exists()
+    assert mock_encode.call_count == 2
+
+    # Second call must come off the cache: _encode is exhausted, so any re-embed
+    # raises StopIteration rather than silently recomputing.
+    second = embedding_scorer._load_reference_embeddings(object(), cfg)
+    assert mock_encode.call_count == 2
+
+    np.testing.assert_allclose(second[0], first[0])
+    np.testing.assert_allclose(second[1], first[1])
+
+
+@patch("job_scraper.scoring.embedding_scorer._encode")
+def test_reference_cache_invalidated_when_memory_changes(mock_encode, cfg):
+    stale = np.array([[1.0, 0.0], [0.0, 1.0]])
+    fresh = np.array([[0.0, 1.0], [1.0, 0.0], [0.5, 0.5]])
+    resume_emb = np.array([[0.6, 0.8]])
+    mock_encode.side_effect = [stale, resume_emb, fresh, resume_emb]
+
+    embedding_scorer._load_reference_embeddings(object(), cfg)
+
+    # A third section changes the cache key, so the stale vectors must not be reused.
+    cfg.memory_path.write_text(
+        cfg.memory_path.read_text()
+        + "## Section Three\n"
+        + "Yet another forty-plus characters of padding text lives here now.\n"
+    )
+    job_history_emb, _ = embedding_scorer._load_reference_embeddings(object(), cfg)
+
+    assert mock_encode.call_count == 4
+    np.testing.assert_allclose(job_history_emb, fresh)
+
+
+@patch("job_scraper.scoring.embedding_scorer._encode")
+def test_reference_cache_invalidated_when_resume_changes(mock_encode, cfg):
+    job_history_emb = np.array([[1.0, 0.0], [0.0, 1.0]])
+    mock_encode.side_effect = [
+        job_history_emb, np.array([[0.6, 0.8]]),
+        job_history_emb, np.array([[0.0, 1.0]]),
+    ]
+
+    embedding_scorer._load_reference_embeddings(object(), cfg)
+    cfg.resume_path.write_text("A rewritten resume.")
+    _, resume_emb = embedding_scorer._load_reference_embeddings(object(), cfg)
+
+    assert mock_encode.call_count == 4
+    np.testing.assert_allclose(resume_emb, [0.0, 1.0])
+
+
+def test_split_sections_drops_short_chunks_and_keeps_headers():
+    sections = embedding_scorer._split_sections(
+        "Preamble text that is comfortably longer than forty characters here.\n"
+        "## Kept\nThis section body is also well over the forty character floor.\n"
+        "## Tiny\nToo short.\n"
+        "### Nested\nAn H3 heading starts its own chunk and this body clears forty.\n"
+    )
+
+    assert len(sections) == 3
+    assert sections[0].startswith("Preamble")
+    assert sections[1].startswith("## Kept")
+    assert sections[2].startswith("### Nested")
+    assert not any(s.startswith("## Tiny") for s in sections)
