@@ -39,6 +39,23 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
       descriptions rather than scoring the embedding of an empty string, so they sit at
       `score IS NULL`. That is 166 of 338 otherwise-relevant postings unassessed.
 
+- [ ] **Scoring fails opaquely when the model artifacts are absent.** `config/scoring/*.joblib`
+      is gitignored, so a fresh clone has no model and `score_postings()` dies on a bare
+      `joblib.load` `FileNotFoundError` pointing at a path, with nothing saying "run
+      train_export first". Every other missing input in this pipeline fails loudly and by
+      name (`_required_env_path`, the two loader raises); this one should match.
+- [ ] **Nothing checks the artifacts against the configured embedding revision.**
+      `scoring.yaml` pins `embedding_model_revision` to the revision the current regressor was
+      fitted on, but that pin is a declaration only — re-pin it without re-running
+      `train_export` and scoring proceeds against a feature space the model never saw, with no
+      error. Storing the revision alongside the artifacts at export and comparing on load
+      would make the mismatch visible instead of silent.
+- [ ] **The revision pin does not cover the custom architecture code.** `revision=` reaches
+      `nomic-ai/nomic-embed-text-v1.5` only; the `trust_remote_code=True` modelling code comes
+      from `nomic-ai/nomic-bert-2048`, which is pinned by nothing but `HF_HUB_OFFLINE=1` and
+      whatever happens to sit in the cache. A machine with a different cache can produce
+      different features from the same config.
+
 ## New ATS sources
 
 - [ ] **Lever scraper** (`job_scraper/ats/lever.py`). `GET https://api.lever.co/v0/postings/{company}?mode=json`.
@@ -116,3 +133,30 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
 - [ ] **Periodic `scrape_runs` review** — `SELECT * FROM scrape_runs WHERE error IS NOT NULL`
       to catch silent failures (e.g. a company's board token going stale) before they go
       unnoticed for weeks.
+
+## Container image
+
+- [ ] **The Airflow image installs the whole `pyproject.toml`.** `pip install -e /opt/airflow`
+      pulls `marimo`, `catboost` and `ipython` into the worker — they exist for the
+      `thinking_space/` notebook and are never imported by `job_scraper`. `torch` and
+      `sentence-transformers` are genuinely needed, so the image stays large regardless
+      (3.43GB today), but it is carrying a notebook stack on top of that. Split the deps into
+      optional groups (`[project.optional-dependencies]`) and have the Dockerfile install only
+      the scoring set.
+- [ ] **Two dependency manifests.** The Dockerfile installs `requirements.txt` and then
+      `pyproject.toml`; the former lists six packages that the latter also declares. Nothing
+      keeps them in step, and it is not obvious which one a new dependency belongs in. Fold
+      `requirements.txt` into `pyproject.toml` and drop it.
+
+## Scoring notebook (`thinking_space/score_jd/score.py`)
+
+- [ ] **The notebook and the package disagree about how to find `AI_Job_Helper`.** The
+      notebook reads a single `AI_JOB_HELPER_ROOT` and derives `job_descriptions/`,
+      `reference/MEMORY.md` and the resume from it. The package deliberately does the
+      opposite — four independent per-file vars, so this repo assumes nothing about that
+      project's layout (ADR-0001). Anyone running both has to set two different, overlapping
+      sets of variables, and the notebook still breaks if `AI_Job_Helper` is rearranged.
+- [ ] **`read_jd_from_file()`'s existence check never runs.** `if Path.exists:` tests a bound
+      method, which is always truthy, so a missing `jd.md` raises from `open()` rather than
+      returning the intended empty string. `train_export.py` hit exactly this and now skips
+      missing rows by name; the notebook still has the original bug.
