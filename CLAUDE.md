@@ -57,8 +57,10 @@ job_scraper/
                              safe concurrent writes from parallel Airflow tasks)
     repository.py            upsert_postings() — dedup via url UNIQUE constraint + ON CONFLICT;
                              get_postings_missing_score()/update_scores() — the score stage's read/
-                             write seam; the read side gates on is_relevant = 1 so only relevant
-                             postings are ever embedded;
+                             write seam; the read side gates on is_relevant = 1 AND a non-empty
+                             description, so only postings that can actually be judged are
+                             embedded (an empty description embeds to an ordinary vector and
+                             would score like a real judgement — every JobSpy LinkedIn row);
                              record_run() — writes scrape_runs (one row per source per run)
   filtering/
     keyword_filter.py        is_relevant(posting, cfg) -> bool
@@ -107,7 +109,8 @@ data/jobs.db                  the actual SQLite output, gitignored — query dir
 - `config/keywords.yaml` — bioinformatics relevance keyword include/exclude lists.
 - `config/companies.csv` — Greenhouse company seed list (`company_name,ats_type,board_identifier,tenant,careers_url,notes`).
 - `config/settings.yaml` — JobSpy search terms/locations/sites.
-- `config/scoring.yaml` — embedding model + artifact paths for scoring. Career-history reference
+- `config/scoring.yaml` — embedding model, its pinned Hub revision, the embedding batch size
+  (a memory knob — it does not change the vectors) and artifact paths. Career-history reference
   data (MEMORY.md, resume, hand-scored training CSV) is owned by the separate `AI_Job_Helper`
   project, not this repo — each required file is reached via its own env var
   (`JOB_HELPER_MEMORY_PATH`, `JOB_HELPER_RESUME_PATH`, `JOB_HELPER_JD_SCORES_CSV`,
