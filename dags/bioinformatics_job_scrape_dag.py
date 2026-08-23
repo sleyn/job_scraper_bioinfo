@@ -29,8 +29,17 @@ def bioinformatics_job_scrape_dag():
         stats = run_source("jobspy", CONFIG_DIR, DB_PATH)
         print(f"jobspy: {stats}")
 
-    scrape_greenhouse_task()
-    scrape_jobspy_task()
+    @task
+    def score_postings_task():
+        from job_scraper.pipeline import score_pending_postings
+
+        stats = score_pending_postings(CONFIG_DIR, DB_PATH)
+        print(f"scoring: {stats}")
+
+    gh = scrape_greenhouse_task()
+    js = scrape_jobspy_task()
+    sc = score_postings_task()
+    [gh, js] >> sc
 
 
 bioinformatics_job_scrape_dag()

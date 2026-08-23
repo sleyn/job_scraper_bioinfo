@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS job_postings (
     first_seen_at   TIMESTAMP NOT NULL,
     last_seen_at    TIMESTAMP NOT NULL,
     is_relevant     INTEGER NOT NULL,
-    extra_json      TEXT
+    extra_json      TEXT,
+    score           REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_job_postings_company ON job_postings(company);
@@ -35,11 +36,20 @@ CREATE TABLE IF NOT EXISTS scrape_runs (
 """
 
 
+def _ensure_score_column(conn: sqlite3.Connection) -> None:
+    """Migration for DBs created before the `score` column existed.
+    CREATE TABLE IF NOT EXISTS won't add it to an already-existing table."""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(job_postings)")}
+    if "score" not in columns:
+        conn.execute("ALTER TABLE job_postings ADD COLUMN score REAL")
+
+
 def init_db(db_path: str) -> None:
     conn = sqlite3.connect(db_path)
     try:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.executescript(SCHEMA)
+        _ensure_score_column(conn)
         conn.commit()
     finally:
         conn.close()
