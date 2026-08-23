@@ -62,9 +62,22 @@ def _load_training_data(cfg: ScoringConfig) -> tuple[list[str], np.ndarray]:
     return descriptions, np.asarray(scores)
 
 
+def _has_no_rank_signal(a: np.ndarray) -> bool:
+    """True when `a` carries no usable ordering, so a rank correlation is undefined.
+
+    Tests constancy by comparison against the first element rather than via np.std().
+    A degenerate trial predicts one identical value for every sample, and for values of
+    any real magnitude the mean of those carries float error — std comes back around
+    1e-14 instead of 0, so a `std == 0` guard waves the array through and spearmanr
+    warns about constant input.
+    """
+    return a.size < 2 or bool(np.isnan(a).any()) or bool((a == a.flat[0]).all())
+
+
 def _spearman_scorer(y_true, y_pred) -> float:
-    y_true, y_pred = np.asarray(y_true), np.asarray(y_pred)
-    if np.std(y_pred) == 0 or np.std(y_true) == 0:
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    if _has_no_rank_signal(y_true) or _has_no_rank_signal(y_pred):
         return 0.0
     correlation, _ = spearmanr(y_true, y_pred)
     return 0.0 if np.isnan(correlation) else correlation
