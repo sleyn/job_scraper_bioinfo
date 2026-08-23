@@ -2,8 +2,9 @@
 #
 # The three career-history inputs (memory, resume, hand-scored training CSV) are NOT
 # configured here: they live outside this repo in the sibling AI_Job_Helper project, so
-# each is resolved from its own env var — JOB_HELPER_MEMORY_PATH, JOB_HELPER_RESUME_PATH
-# and JOB_HELPER_JD_SCORES_CSV (set them in .env, see .env.example). One var per file, so
+# each is resolved from its own env var — JOB_HELPER_MEMORY_PATH, JOB_HELPER_RESUME_PATH,
+# JOB_HELPER_JD_SCORES_CSV and JOB_HELPER_JD_DIR (set them in .env, see .env.example). One
+# var per path, so
 # this repo never has to know AI_Job_Helper's internal directory layout. If this pipeline
 # ever runs inside Docker (see docker-compose.yaml), those three files must each be
 # volume-mounted into the container or the scoring task will fail to find them.

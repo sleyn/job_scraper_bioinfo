@@ -47,7 +47,7 @@ job_scraper/
   models.py              JobPosting dataclass — the common shape every source normalizes into
   config.py               loaders for keywords.yaml / companies.csv / settings.yaml / scoring.yaml;
                            compiles keyword regex with word boundaries (\b(?:pattern)\b);
-                           load_scoring_config() resolves the three career-history paths from their
+                           load_scoring_config() resolves the four career-history paths from their
                            own env vars (not from scoring.yaml), failing loudly if one is unset
   pipeline.py              run_source(source_type, config_dir, db_path) — fetch -> filter -> upsert,
                            the single entry point both the DAG and manual scripts call; per-company
@@ -110,8 +110,10 @@ data/jobs.db                  the actual SQLite output, gitignored — query dir
 - `config/scoring.yaml` — embedding model + artifact paths for scoring. Career-history reference
   data (MEMORY.md, resume, hand-scored training CSV) is owned by the separate `AI_Job_Helper`
   project, not this repo — each required file is reached via its own env var
-  (`JOB_HELPER_MEMORY_PATH`, `JOB_HELPER_RESUME_PATH`, `JOB_HELPER_JD_SCORES_CSV`), not a shared
-  root directory, so this repo never needs to know `AI_Job_Helper`'s internal layout.
+  (`JOB_HELPER_MEMORY_PATH`, `JOB_HELPER_RESUME_PATH`, `JOB_HELPER_JD_SCORES_CSV`,
+  `JOB_HELPER_JD_DIR`), not a shared root directory, so this repo never needs to know
+  `AI_Job_Helper`'s internal layout. The JD directory gets its own var rather than being
+  derived from the scores CSV's parent — see `docs/adr/0001-career-history-stays-external.md`.
 
 ## Running tests
 

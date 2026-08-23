@@ -53,6 +53,7 @@ class ScoringConfig:
     regressor_path: Path
     scaler_path: Path
     jd_scores_csv: Path | None
+    jd_dir: Path | None = None
     embedding_model_revision: str | None = None
 
 
@@ -109,6 +110,7 @@ def load_scoring_config(config_dir: Path | str) -> ScoringConfig:
     # resolved from its own env var — this repo never assumes that project's layout.
     repo_root = config_dir.parent
     jd_scores_csv = os.environ.get("JOB_HELPER_JD_SCORES_CSV", "").strip()
+    jd_dir = os.environ.get("JOB_HELPER_JD_DIR", "").strip()
 
     return ScoringConfig(
         embedding_model=raw["embedding_model"],
@@ -120,6 +122,10 @@ def load_scoring_config(config_dir: Path | str) -> ScoringConfig:
         regressor_path=repo_root / raw["regressor_path"],
         scaler_path=repo_root / raw["scaler_path"],
         jd_scores_csv=_expand_path(jd_scores_csv) if jd_scores_csv else None,
+        # The directory holding one <name>/jd.md per scored row. Its own var rather
+        # than the CSV's parent: the two need not sit together, and deriving one from
+        # the other is exactly the layout assumption ADR-0001 rules out.
+        jd_dir=_expand_path(jd_dir) if jd_dir else None,
         # Optional: absent means "whatever revision resolves", which is what the
         # exported regressor silently depends on if nobody pins it.
         embedding_model_revision=raw.get("embedding_model_revision"),

@@ -3,9 +3,9 @@
 `job_scraper`'s scoring stage needs the user's career history (`reference/MEMORY.md`), resume,
 and hand-scored training CSV to build fit features and train the regressor. We decided this data
 stays owned by the separate `AI_Job_Helper` project rather than being copied or committed into
-this repo, and is reached via three independent env vars (`JOB_HELPER_MEMORY_PATH`,
-`JOB_HELPER_RESUME_PATH`, `JOB_HELPER_JD_SCORES_CSV`) rather than one shared root directory plus
-derived relative paths.
+this repo, and is reached via four independent env vars (`JOB_HELPER_MEMORY_PATH`,
+`JOB_HELPER_RESUME_PATH`, `JOB_HELPER_JD_SCORES_CSV`, `JOB_HELPER_JD_DIR`) rather than one shared
+root directory plus derived relative paths.
 
 **Why**: `job_scraper` is meant to stay a general-purpose scraper/scoring tool with no personal
 data committed to it; `AI_Job_Helper` stays the sole owner of that data and its internal layout.
@@ -21,3 +21,10 @@ As implemented in `docker-compose.yaml`, only two of the three reach the contain
 the resume are bind-mounted read-only onto fixed paths under `/opt/airflow/career/`, with the env
 vars overridden to point there, so the host layout stays in `.env`. `JOB_HELPER_JD_SCORES_CSV` is
 deliberately not passed in — only `train_export.py` reads it, and training runs on the host.
+
+**Amendment, 2026-08-23**: `_load_training_data()` originally read only the scores CSV var and
+took the JD directory to be that file's parent, walking `<parent>/<name>/jd.md`. That is the same
+layout assumption this ADR exists to prevent, arrived at by inference rather than configuration —
+it silently required `AI_Job_Helper` to keep the CSV inside the JD directory forever. The
+directory now has its own var, `JOB_HELPER_JD_DIR`, and a test asserts the two paths can point
+anywhere independently. Both are training-only: neither reaches the Airflow container.

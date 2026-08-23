@@ -37,8 +37,13 @@ def _load_training_data(cfg: ScoringConfig) -> tuple[list[str], np.ndarray]:
         raise ValueError(
             "JOB_HELPER_JD_SCORES_CSV is not set; it must point at the hand-scored JD CSV"
         )
+    if cfg.jd_dir is None:
+        raise ValueError(
+            "JOB_HELPER_JD_DIR is not set; it must point at the directory holding one "
+            "<name>/jd.md per scored row"
+        )
 
-    jd_dir = cfg.jd_scores_csv.parent
+    jd_dir = cfg.jd_dir
     table = pd.read_csv(cfg.jd_scores_csv).dropna(subset=["Score"])
 
     # Some hand-scored rows have no jd.md on disk — the score was recorded against an

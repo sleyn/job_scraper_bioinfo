@@ -125,6 +125,34 @@ def test_raises_when_jd_scores_csv_unset(monkeypatch, config_dir):
         train_export._load_training_data(load_scoring_config(config_dir))
 
 
+def test_raises_when_jd_dir_unset(hand_scored_jds, monkeypatch, config_dir):
+    monkeypatch.delenv("JOB_HELPER_JD_DIR")
+
+    with pytest.raises(ValueError, match="JOB_HELPER_JD_DIR"):
+        train_export._load_training_data(load_scoring_config(config_dir))
+
+
+def test_scores_csv_and_jd_dir_need_not_sit_together(tmp_path, monkeypatch, config_dir):
+    """ADR-0001: this repo resolves each career-history path from its own env var and
+    assumes nothing about how AI_Job_Helper arranges them. Deriving the JD directory
+    from the CSV's parent would silently reintroduce that assumption."""
+    jds = _write_hand_scored_jds(
+        [("2026-01-01_First", "80", "First Role")], tmp_path / "somewhere" / "jds"
+    )
+    elsewhere = tmp_path / "unrelated" / "scores.csv"
+    elsewhere.parent.mkdir(parents=True)
+    elsewhere.write_text((jds / "scores.csv").read_text())
+    monkeypatch.setenv("JOB_HELPER_JD_SCORES_CSV", str(elsewhere))
+    monkeypatch.setenv("JOB_HELPER_JD_DIR", str(jds))
+
+    descriptions, scores = train_export._load_training_data(
+        load_scoring_config(config_dir)
+    )
+
+    assert "First Role" in descriptions[0]
+    np.testing.assert_array_equal(scores, [80])
+
+
 def test_raises_when_no_row_resolves_to_a_jd(cfg, jd_dir):
     _write_hand_scored_jds([("2026-01-03_Typo", "55", None)], jd_dir)
 

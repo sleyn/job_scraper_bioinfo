@@ -23,3 +23,4 @@ def career_history_env(monkeypatch, tmp_path):
     monkeypatch.setenv("JOB_HELPER_MEMORY_PATH", str(tmp_path / "helper" / "MEMORY.md"))
     monkeypatch.setenv("JOB_HELPER_RESUME_PATH", str(tmp_path / "helper" / "resume.md"))
     monkeypatch.setenv("JOB_HELPER_JD_SCORES_CSV", str(tmp_path / "helper" / "scores.csv"))
+    monkeypatch.setenv("JOB_HELPER_JD_DIR", str(tmp_path / "helper"))
