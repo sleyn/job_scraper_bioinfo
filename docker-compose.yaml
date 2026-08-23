@@ -6,6 +6,13 @@ x-airflow-common-env: &airflow-common-env
   AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
   JOB_SCRAPER_CONFIG_DIR: /opt/airflow/config
   JOB_SCRAPER_DB_PATH: /opt/airflow/data/jobs.db
+  # Container-side paths for the two career-history files the scoring task reads. The
+  # host-side locations are the ${JOB_HELPER_*} values in .env; the bind mounts below
+  # map those onto these fixed in-container paths, so the container never depends on
+  # AI_Job_Helper's layout on this machine. JOB_HELPER_JD_SCORES_CSV is deliberately
+  # absent: only train_export.py needs it, and that runs on the host, not in Airflow.
+  JOB_HELPER_MEMORY_PATH: /opt/airflow/career/MEMORY.md
+  JOB_HELPER_RESUME_PATH: /opt/airflow/career/resume.md
 
 x-airflow-common: &airflow-common
   build: .
@@ -15,6 +22,11 @@ x-airflow-common: &airflow-common
     - ./dags:/opt/airflow/dags
     - ./config:/opt/airflow/config
     - ./data:/opt/airflow/data
+    # Read-only mounts of the two files scoring needs from the sibling AI_Job_Helper
+    # project. Compose fails to start if either var is unset in .env — which is the
+    # intent: the scoring task would otherwise fail at runtime instead.
+    - ${JOB_HELPER_MEMORY_PATH:?set JOB_HELPER_MEMORY_PATH in .env}:/opt/airflow/career/MEMORY.md:ro
+    - ${JOB_HELPER_RESUME_PATH:?set JOB_HELPER_RESUME_PATH in .env}:/opt/airflow/career/resume.md:ro
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     postgres:

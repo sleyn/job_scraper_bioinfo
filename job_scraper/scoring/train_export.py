@@ -41,11 +41,25 @@ def _load_training_data(cfg: ScoringConfig) -> tuple[list[str], np.ndarray]:
     jd_dir = cfg.jd_scores_csv.parent
     table = pd.read_csv(cfg.jd_scores_csv).dropna(subset=["Score"])
 
-    descriptions = [
-        _HEADER_RE.sub("", (jd_dir / name / "jd.md").read_text())
-        for name in table["Name"]
-    ]
-    return descriptions, table["Score"].to_numpy()
+    # Some hand-scored rows have no jd.md on disk — the score was recorded against an
+    # application whose JD text was never saved. Those rows carry a label with no
+    # features, so they're skipped rather than fatal; a row whose name is merely
+    # misspelled shows up in this warning, which is how you notice it.
+    descriptions, scores, skipped = [], [], []
+    for name, score in zip(table["Name"], table["Score"]):
+        jd_path = jd_dir / name / "jd.md"
+        if not jd_path.is_file():
+            skipped.append(name)
+            continue
+        descriptions.append(_HEADER_RE.sub("", jd_path.read_text()))
+        scores.append(score)
+
+    if skipped:
+        print(f"Skipped {len(skipped)} scored row(s) with no jd.md: {', '.join(skipped)}")
+    if not descriptions:
+        raise ValueError(f"No usable training JDs found under {jd_dir}")
+
+    return descriptions, np.asarray(scores)
 
 
 def _spearman_scorer(y_true, y_pred) -> float:

@@ -10,13 +10,16 @@ and `README.md` "Known limitations" for user-facing notes on some of these.
 see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — but the
 `ML_JD_scoring` branch's integration is unfinished:
 
-- [ ] **Export production model artifacts.** `config/scoring/` (where `regressor.joblib` and
-      `scaler.joblib` are expected) is currently empty — run
-      `python -m job_scraper.scoring.train_export` against the hand-scored JD set to produce them.
-- [ ] **Pass the career-history env vars into the Docker/Airflow scoring container.**
-      `JOB_HELPER_MEMORY_PATH`/`JOB_HELPER_RESUME_PATH`/`JOB_HELPER_JD_SCORES_CSV` now resolve
-      per-file, but `docker-compose.yaml` neither passes them through nor mounts the three files,
-      so scoring only works outside Docker (see `docs/adr/`).
+- [x] **Export production model artifacts.** `config/scoring/{regressor,scaler}.joblib` are
+      exported by `python -m job_scraper.scoring.train_export`. Re-run it after adding
+      hand-scored JDs; the artifacts are gitignored, so each checkout must train its own.
+- [x] **Pass the career-history env vars into the Docker/Airflow scoring container.**
+      `docker-compose.yaml` bind-mounts MEMORY.md and the resume read-only at
+      `/opt/airflow/career/` and overrides the two vars to those paths. `JOB_HELPER_JD_SCORES_CSV`
+      is intentionally not passed in — only `train_export` needs it, and that runs on the host.
+- [ ] **Test `train_export.py`.** `tests/scoring/` covers `embedding_scorer` only. The
+      hand-scored CSV / jd.md-directory loading in `_load_training_data()` is the untested part
+      that has already produced one failure (rows whose `jd.md` is missing).
 
 ## New ATS sources
 
