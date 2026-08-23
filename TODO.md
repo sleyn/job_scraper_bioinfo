@@ -20,14 +20,16 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
 - [x] **Test `train_export.py`.** `tests/scoring/test_train_export.py` covers the loader, the
       tuning helpers and the export round-trip; the degenerate-trial guard in `_spearman_scorer`
       was fixed in the process. See `.scratch/train-export-tests/`.
-- [ ] **Run the scoring stage under Airflow once.** Everything below the DAG is exercised —
-      the stage has been run end to end on a copy of the real `data/jobs.db` from a local venv —
-      but `score_postings_task` has never executed inside the container, so the HF cache mount
-      and the career-history bind mounts are verified by `docker compose config` only. Boot the
-      stack and trigger one run before trusting the daily schedule.
-- [ ] **Migrate the live `data/jobs.db`.** It predates the `score` column and has 627 postings,
-      338 of them relevant and unscored. `_ensure_score_column()` adds the column on the next
-      `init_db()`, verified on a copy — but until something runs, the live DB is pre-scoring.
+- [x] **Run the scoring stage under Airflow once.** Done 2026-08-23, run `manual_verify_1`:
+      all three tasks succeeded, both mounts resolved inside the container, and scoring wrote
+      210 scores to the live DB with no Hub access (offline mode held). Building the image
+      needed a Dockerfile fix — see the CPU-only torch note there.
+- [ ] **Scoring takes ~14 min in the container vs ~110s locally.** Same 210 postings. The
+      container is CPU-only while a local run uses Apple MPS. Fine for a daily schedule now,
+      but it scales with the backlog, and the first full run over an empty DB would be far
+      longer. Revisit if the DAG starts overrunning its schedule.
+- [x] **Migrate the live `data/jobs.db`.** Done by run `manual_verify_1`: the column was added
+      in place, all rows preserved (751 postings, 396 relevant, 210 scored).
 
 - [ ] **JobSpy LinkedIn returns no descriptions.** All 373 LinkedIn rows in `data/jobs.db`
       have an empty `description`; Indeed and Greenhouse rows are fine. JobSpy needs
