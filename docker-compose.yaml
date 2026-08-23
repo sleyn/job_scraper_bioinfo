@@ -13,6 +13,11 @@ x-airflow-common-env: &airflow-common-env
   # absent: only train_export.py needs it, and that runs on the host, not in Airflow.
   JOB_HELPER_MEMORY_PATH: /opt/airflow/career/MEMORY.md
   JOB_HELPER_RESUME_PATH: /opt/airflow/career/resume.md
+  # The embedding model is ~500MB and would otherwise be re-fetched on every cold
+  # container start. The host cache is mounted below; offline mode pins the load to it
+  # and keeps the container off the Hub entirely, so a scoring run needs no network.
+  HF_HOME: /opt/airflow/hf-cache
+  HF_HUB_OFFLINE: "1"
 
 x-airflow-common: &airflow-common
   build: .
@@ -27,6 +32,11 @@ x-airflow-common: &airflow-common
     # intent: the scoring task would otherwise fail at runtime instead.
     - ${JOB_HELPER_MEMORY_PATH:?set JOB_HELPER_MEMORY_PATH in .env}:/opt/airflow/career/MEMORY.md:ro
     - ${JOB_HELPER_RESUME_PATH:?set JOB_HELPER_RESUME_PATH in .env}:/opt/airflow/career/resume.md:ro
+    # HuggingFace cache, read-write: offline mode still writes lock files on load, and a
+    # read-only mount makes that fail. Populate it on the host first (any local scoring or
+    # training run does), since HF_HUB_OFFLINE=1 turns a cache miss into an error, not a
+    # download.
+    - ${HF_HOME:-~/.cache/huggingface}:/opt/airflow/hf-cache
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     postgres:
