@@ -31,13 +31,21 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
 - [x] **Migrate the live `data/jobs.db`.** Done by run `manual_verify_1`: the column was added
       in place, all rows preserved (751 postings, 396 relevant, 210 scored).
 
-- [ ] **JobSpy LinkedIn returns no descriptions.** All 373 LinkedIn rows in `data/jobs.db`
-      have an empty `description`; Indeed and Greenhouse rows are fine. JobSpy needs
-      `linkedin_fetch_description=True` (an extra request per posting, so it is slow and
-      rate-limit-prone — check whether the run still fits the daily schedule). Until then
-      those postings are never scored: `get_postings_missing_score()` skips empty
-      descriptions rather than scoring the embedding of an empty string, so they sit at
-      `score IS NULL`. That is 166 of 338 otherwise-relevant postings unassessed.
+- [x] **JobSpy LinkedIn returns no descriptions.** Fixed: `fetch_jobspy` now passes
+      `linkedin_fetch_description=True` to `scrape_jobs`. The scrape -> filter -> score chain
+      for a LinkedIn posting is covered by a repeatable test
+      (`tests/test_pipeline_jobspy_linkedin.py`: mocks `scrape_jobs` and
+      `embed_score_postings`, runs the real `run_source`/`score_pending_postings` path). Also
+      verified manually against a live LinkedIn scrape (not repeatable from the repo, numbers
+      recorded here for reference) — 5 postings, all with non-empty descriptions, all flowed
+      through `is_relevant` and were scored. Timing: ~1.1s per LinkedIn posting for the extra
+      description request (~35s for 30 results, one search term); with the production
+      `settings.yaml` (2 search terms x 1 location) that's ~70s added to the LinkedIn leg of a
+      daily run — well within the daily schedule, and no rate-limiting was hit across ~35
+      requests in that manual run. The 166 already-stored LinkedIn rows with empty
+      descriptions are not touched by this fix (a normal scrape only revisits postings within
+      `hours_old`) — see the backfill ticket
+      (`.scratch/jobspy-linkedin-descriptions/issues/02-backfill-existing-linkedin-rows.md`).
 
 - [ ] **Scoring fails opaquely when the model artifacts are absent.** `config/scoring/*.joblib`
       is gitignored, so a fresh clone has no model and `score_postings()` dies on a bare

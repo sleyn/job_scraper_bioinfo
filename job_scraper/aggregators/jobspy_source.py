@@ -68,6 +68,9 @@ def fetch_jobspy(
                 location=location,
                 results_wanted=results_wanted,
                 hours_old=hours_old,
+                # No-op for non-LinkedIn sites; JobSpy only makes the extra
+                # per-posting description request when "linkedin" is in site_name.
+                linkedin_fetch_description=True,
             )
             if df is None or df.empty:
                 continue
