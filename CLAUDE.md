@@ -52,6 +52,14 @@ job_scraper/
   pipeline.py              run_source(source_type, config_dir, db_path) — fetch -> filter -> upsert,
                            the single entry point both the DAG and manual scripts call; per-company
                            fetch failures are caught and logged, not fatal to the whole task
+  backfill_linkedin_descriptions.py   one-off CLI (python -m
+                           job_scraper.backfill_linkedin_descriptions): re-fetches descriptions for
+                           already-stored, empty-description LinkedIn rows one job id at a time (jobspy
+                           has no public single-job fetch, so this calls into
+                           jobspy.linkedin.LinkedIn's private _get_job_details), then re-runs the score
+                           stage; lives at this level rather than in ats/ or aggregators/ because,
+                           like pipeline.py, it orchestrates fetch + DB write + scoring rather than
+                           being a pure per-source fetcher
   db/
     schema.py               CREATE TABLE statements, init_db(), get_connection() (WAL mode, for
                              safe concurrent writes from parallel Airflow tasks)

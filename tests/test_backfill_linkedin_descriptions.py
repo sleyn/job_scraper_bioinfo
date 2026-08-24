@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from job_scraper.aggregators.backfill_linkedin_descriptions import backfill_linkedin_descriptions
+from job_scraper.backfill_linkedin_descriptions import backfill_linkedin_descriptions
 from job_scraper.db.repository import get_postings_missing_score, upsert_postings
 from job_scraper.db.schema import init_db
 from job_scraper.models import JobPosting
@@ -22,8 +22,8 @@ def _linkedin_posting(url):
     )
 
 
-@patch("job_scraper.aggregators.backfill_linkedin_descriptions.fetch_linkedin_description")
-@patch("job_scraper.aggregators.backfill_linkedin_descriptions.time.sleep")
+@patch("job_scraper.backfill_linkedin_descriptions.fetch_linkedin_description")
+@patch("job_scraper.backfill_linkedin_descriptions.time.sleep")
 def test_backfill_fetches_and_persists_missing_descriptions(
     mock_sleep, mock_fetch_description, config_dir, tmp_path
 ):
@@ -48,8 +48,8 @@ def test_backfill_fetches_and_persists_missing_descriptions(
     mock_sleep.assert_called_once()
 
 
-@patch("job_scraper.aggregators.backfill_linkedin_descriptions.fetch_linkedin_description")
-@patch("job_scraper.aggregators.backfill_linkedin_descriptions.time.sleep")
+@patch("job_scraper.backfill_linkedin_descriptions.fetch_linkedin_description")
+@patch("job_scraper.backfill_linkedin_descriptions.time.sleep")
 def test_backfill_skips_rows_with_no_description_returned(
     mock_sleep, mock_fetch_description, config_dir, tmp_path
 ):
@@ -66,7 +66,7 @@ def test_backfill_skips_rows_with_no_description_returned(
     assert get_postings_missing_score(db_path) == {}
 
 
-@patch("job_scraper.aggregators.backfill_linkedin_descriptions.fetch_linkedin_description")
+@patch("job_scraper.backfill_linkedin_descriptions.fetch_linkedin_description")
 def test_backfill_is_noop_when_nothing_missing(mock_fetch_description, config_dir, tmp_path):
     db_path = str(tmp_path / "jobs.db")
     init_db(db_path)

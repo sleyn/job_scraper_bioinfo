@@ -4,8 +4,14 @@ revisits postings within its `hours_old` window, so these older rows are never r
 on their own — this re-fetches each one's description directly by job id, then runs the
 score stage so they stop sitting at `score IS NULL`.
 
-Usage: python -m job_scraper.aggregators.backfill_linkedin_descriptions
+Usage: python -m job_scraper.backfill_linkedin_descriptions
        [--config-dir config] [--db-path data/jobs.db]
+
+Rerunning this is only useful for postings that newly went NULL-description since the last
+run (e.g. a `hours_old`-window scrape that missed them). It has no memory of which urls it
+already tried: a posting whose description came back empty because the LinkedIn listing has
+since expired (not a fetch error — LinkedIn 200s to an `expired_jd_redirect` page) will be
+re-selected and re-fetched on every future run, for no possible gain.
 """
 from __future__ import annotations
 

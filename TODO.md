@@ -47,7 +47,7 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
       `hours_old`) — backfilled separately, see below.
 
 - [x] **Backfill descriptions for existing NULL-description LinkedIn rows.** Added
-      `python -m job_scraper.aggregators.backfill_linkedin_descriptions`: re-fetches each
+      `python -m job_scraper.backfill_linkedin_descriptions`: re-fetches each
       relevant, empty-description LinkedIn row's description directly by job id (via
       `jobspy.linkedin.LinkedIn._get_job_details`, the same per-job request
       `linkedin_fetch_description=True` makes internally — jobspy has no public single-job

@@ -7,6 +7,14 @@ from datetime import datetime, timezone
 from job_scraper.db.schema import get_connection
 from job_scraper.models import JobPosting
 
+# SQLite's one-argument TRIM strips spaces only, so the character set is given
+# explicitly: tab, newline and carriage return count as empty too.
+_DESCRIPTION_IS_EMPTY_SQL = (
+    "TRIM(COALESCE(description, ''), ' ' || char(9) || char(10) || char(13)) = ''"
+)
+
+LINKEDIN_SOURCE_PATTERN = "jobspy:linkedin%"
+
 UPSERT_SQL = """
 INSERT INTO job_postings (
     url, raw_id, source, company, title, location, description,
@@ -92,9 +100,7 @@ def get_postings_missing_score(db_path: str) -> dict[str, str]:
         rows = conn.execute(
             "SELECT url, description FROM job_postings "
             "WHERE score IS NULL AND is_relevant = 1 "
-            # SQLite's one-argument TRIM strips spaces only, so the character set is
-            # given explicitly: tab, newline and carriage return count as empty too.
-            "AND TRIM(COALESCE(description, ''), ' ' || char(9) || char(10) || char(13)) != ''"
+            f"AND NOT ({_DESCRIPTION_IS_EMPTY_SQL})"
         ).fetchall()
         return {row["url"]: row["description"] for row in rows}
     finally:
@@ -104,13 +110,14 @@ def get_postings_missing_score(db_path: str) -> dict[str, str]:
 def get_linkedin_urls_missing_description(db_path: str) -> list[str]:
     """Returns urls of relevant LinkedIn postings stored with an empty description —
     the backfill target for postings ingested before description fetching was enabled
-    (see aggregators/backfill_linkedin_descriptions.py)."""
+    (see backfill_linkedin_descriptions.py)."""
     conn = get_connection(db_path)
     try:
         rows = conn.execute(
             "SELECT url FROM job_postings "
-            "WHERE is_relevant = 1 AND source LIKE 'jobspy:linkedin%' "
-            "AND TRIM(COALESCE(description, ''), ' ' || char(9) || char(10) || char(13)) = ''"
+            "WHERE is_relevant = 1 AND source LIKE :linkedin_pattern "
+            f"AND {_DESCRIPTION_IS_EMPTY_SQL}",
+            {"linkedin_pattern": LINKEDIN_SOURCE_PATTERN},
         ).fetchall()
         return [row["url"] for row in rows]
     finally:
