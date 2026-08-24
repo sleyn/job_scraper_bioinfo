@@ -5,6 +5,7 @@ __pycache__/
 .eggs/
 build/
 dist/
+__marimo__/
 
 # Virtual environments
 .venv/
@@ -32,6 +33,7 @@ job_postings.csv
 config/scoring/*.joblib
 *.npz
 thinking_space/score_jd/catboost_info/
+thinking_space/score_jd/models/
 
 # Secrets / local env (keep .env.example tracked)
 .env
