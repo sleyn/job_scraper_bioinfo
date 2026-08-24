@@ -101,6 +101,36 @@ def get_postings_missing_score(db_path: str) -> dict[str, str]:
         conn.close()
 
 
+def get_linkedin_urls_missing_description(db_path: str) -> list[str]:
+    """Returns urls of relevant LinkedIn postings stored with an empty description —
+    the backfill target for postings ingested before description fetching was enabled
+    (see aggregators/backfill_linkedin_descriptions.py)."""
+    conn = get_connection(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT url FROM job_postings "
+            "WHERE is_relevant = 1 AND source LIKE 'jobspy:linkedin%' "
+            "AND TRIM(COALESCE(description, ''), ' ' || char(9) || char(10) || char(13)) = ''"
+        ).fetchall()
+        return [row["url"] for row in rows]
+    finally:
+        conn.close()
+
+
+def update_descriptions(db_path: str, descriptions: dict[str, str]) -> int:
+    """Writes posting.url -> description. Returns the number of rows updated."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.executemany(
+            "UPDATE job_postings SET description = :description WHERE url = :url",
+            [{"url": url, "description": description} for url, description in descriptions.items()],
+        )
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        conn.close()
+
+
 def update_scores(db_path: str, scores: dict[str, float]) -> int:
     """Writes posting.url -> score. Returns the number of rows updated."""
     conn = get_connection(db_path)

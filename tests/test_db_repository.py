@@ -3,7 +3,9 @@ from datetime import datetime, timezone
 import pytest
 
 from job_scraper.db.repository import (
+    get_linkedin_urls_missing_description,
     get_postings_missing_score,
+    update_descriptions,
     update_scores,
     upsert_postings,
 )
@@ -18,9 +20,9 @@ def db_path(tmp_path):
     return path
 
 
-def _posting(url, title="Bioinformatics Scientist", description="desc"):
+def _posting(url, title="Bioinformatics Scientist", description="desc", source="greenhouse"):
     return JobPosting(
-        source="greenhouse",
+        source=source,
         company="Acme",
         title=title,
         location="Remote",
@@ -138,3 +140,52 @@ def test_pending_score_query_skips_postings_with_no_description(db_path):
     pending = get_postings_missing_score(db_path)
 
     assert set(pending) == {"https://example.com/described"}
+
+
+def test_get_linkedin_urls_missing_description_only_matches_relevant_empty_linkedin_rows(
+    db_path,
+):
+    postings = [
+        _posting(
+            "https://linkedin.com/jobs/view/1",
+            source="jobspy:linkedin",
+            description="",
+        ),
+        _posting(
+            "https://linkedin.com/jobs/view/2",
+            source="jobspy:linkedin",
+            description="Already has a description.",
+        ),
+        _posting(
+            "https://linkedin.com/jobs/view/3",
+            source="jobspy:linkedin",
+            description="",
+            title="Sales Development Rep",
+        ),
+        _posting(
+            "https://indeed.com/jobs/4",
+            source="jobspy:indeed",
+            description="",
+        ),
+    ]
+    relevance = {p.url: p.title != "Sales Development Rep" for p in postings}
+    upsert_postings(db_path, postings, relevance)
+
+    urls = get_linkedin_urls_missing_description(db_path)
+
+    assert urls == ["https://linkedin.com/jobs/view/1"]
+
+
+def test_update_descriptions_persists_and_unblocks_scoring(db_path):
+    posting = _posting(
+        "https://linkedin.com/jobs/view/5", source="jobspy:linkedin", description=""
+    )
+    upsert_postings(db_path, [posting], {posting.url: True})
+    assert get_postings_missing_score(db_path) == {}
+
+    updated = update_descriptions(db_path, {posting.url: "Bioinformatics pipelines."})
+
+    assert updated == 1
+    assert get_postings_missing_score(db_path) == {
+        posting.url: "Bioinformatics pipelines."
+    }

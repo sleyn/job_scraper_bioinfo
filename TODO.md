@@ -44,8 +44,25 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
       daily run — well within the daily schedule, and no rate-limiting was hit across ~35
       requests in that manual run. The 166 already-stored LinkedIn rows with empty
       descriptions are not touched by this fix (a normal scrape only revisits postings within
-      `hours_old`) — see the backfill ticket
-      (`.scratch/jobspy-linkedin-descriptions/issues/02-backfill-existing-linkedin-rows.md`).
+      `hours_old`) — backfilled separately, see below.
+
+- [x] **Backfill descriptions for existing NULL-description LinkedIn rows.** Added
+      `python -m job_scraper.aggregators.backfill_linkedin_descriptions`: re-fetches each
+      relevant, empty-description LinkedIn row's description directly by job id (via
+      `jobspy.linkedin.LinkedIn._get_job_details`, the same per-job request
+      `linkedin_fetch_description=True` makes internally — jobspy has no public single-job
+      API), updates it in place, then runs the score stage. Run live against `data/jobs.db`:
+      of 186 relevant, unscored LinkedIn rows, 88 got a real description and a score; the
+      other 98 came back empty because the posting itself has expired on LinkedIn
+      (`GET .../jobs/view/{id}` 200s to `.../jobs/<slug>-jobs?trk=expired_jd_redirect`, not an
+      error or rate limit — confirmed by hand for several ids). Those 98 can never be
+      backfilled — the description no longer exists anywhere to fetch — so they stay at
+      `score IS NULL` by the same rule that skips empty-description rows generally (see
+      `get_postings_missing_score`'s docstring): no description means no judgment is possible,
+      and that's the honest state, not a bug. `SELECT COUNT(*) FROM job_postings WHERE
+      is_relevant = 1 AND score IS NULL AND source LIKE 'jobspy:linkedin%'` is 98, all
+      permanently-expired postings — not near zero in absolute count, but zero recoverable
+      ones remain.
 
 - [ ] **Scoring fails opaquely when the model artifacts are absent.** `config/scoring/*.joblib`
       is gitignored, so a fresh clone has no model and `score_postings()` dies on a bare
