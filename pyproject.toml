@@ -35,3 +35,6 @@ include = ["job_scraper*"]
 dev = [
     "pytest>=9.1.1",
 ]
+
+[tool.marimo.runtime]
+dotenv = [".env"]

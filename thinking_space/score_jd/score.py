@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.9"
+__generated_with = "0.23.13"
 app = marimo.App()
 
 
@@ -12,6 +12,13 @@ def _(mo):
     I have a set of job descriptions that were scored against my job history using Claude. The idea is to use this set as a training data for a fast NLP model that could score downloaded job descriptions on the fly.
     """)
     return
+
+
+@app.cell
+def _():
+    import marimo as mo
+
+    return (mo,)
 
 
 @app.cell(hide_code=True)
@@ -29,12 +36,22 @@ def _():
     from pathlib import Path
     import re
 
-    # AI_JOB_HELPER_ROOT points at the sibling AI_Job_Helper project (resume + job-history
-    # notes); set it in .env and export before running (see README.md "JD scoring").
-    AI_JOB_HELPER_ROOT = Path(os.path.expanduser(os.environ["AI_JOB_HELPER_ROOT"]))
-    JD_PATH = AI_JOB_HELPER_ROOT / 'job_descriptions'
-    JD_SCORES_TABLE = Path('job_socres.csv')
-    return AI_JOB_HELPER_ROOT, JD_PATH, JD_SCORES_TABLE, Path, pd, re
+    # Career-history reference data, owned by the sibling AI_Job_Helper project. Each path
+    # has its own env var per docs/adr/0001-career-history-stays-external.md; set them in
+    # .env and export before running (see README.md "JD scoring").
+    JOB_HELPER_MEMORY_PATH = Path(os.path.expanduser(os.environ["JOB_HELPER_MEMORY_PATH"]))
+    JOB_HELPER_RESUME_PATH = Path(os.path.expanduser(os.environ["JOB_HELPER_RESUME_PATH"]))
+    JD_PATH = Path(os.path.expanduser(os.environ["JOB_HELPER_JD_DIR"]))
+    JD_SCORES_TABLE = Path(os.path.expanduser(os.environ["JOB_HELPER_JD_SCORES_CSV"]))
+    return (
+        JD_PATH,
+        JD_SCORES_TABLE,
+        JOB_HELPER_MEMORY_PATH,
+        JOB_HELPER_RESUME_PATH,
+        Path,
+        pd,
+        re,
+    )
 
 
 @app.cell
@@ -50,7 +67,7 @@ def _(Path, pd):
 
     def collect_jd_from_path(jd_dir_path: Path, score_file: Path) -> pd.DataFrame:
         # Read score table
-        score_tbl = pd.read_csv(jd_dir_path / score_file).dropna(subset=['Score'])
+        score_tbl = pd.read_csv(score_file).dropna(subset=['Score'])
 
         # Add JD
         score_tbl['JD'] = score_tbl['Name'].apply(lambda jd_folder: read_jd_from_file(jd_dir_path / jd_folder / "jd.md"))
@@ -563,17 +580,15 @@ def _(mo):
 
 
 @app.cell
-def _(AI_JOB_HELPER_ROOT, Path, jd_table, np, re):
+def _(JOB_HELPER_MEMORY_PATH, JOB_HELPER_RESUME_PATH, Path, jd_table, np, re):
     from sentence_transformers import SentenceTransformer
     import hashlib
 
     # Experience anchors (non-company-tailored -> no target leakage).
     # MEMORY.md is the ground-truth job-history knowledge base AND the source the
     # JD scores were labeled against; the generic resume is kept for comparison.
-    _MEMORY_PATH = AI_JOB_HELPER_ROOT / "reference" / "MEMORY.md"
-    _RESUME_PATH = (
-        AI_JOB_HELPER_ROOT / "resumes" / "Semion_Leyn_Resume_Generic_2026-07-23.md"
-    )
+    _MEMORY_PATH = JOB_HELPER_MEMORY_PATH
+    _RESUME_PATH = JOB_HELPER_RESUME_PATH
     _EMB_CACHE = Path(__file__).parent / "jd_embeddings_nomic.npz"
 
     embedding_model = SentenceTransformer(
@@ -873,6 +888,198 @@ def _(
         }
     )
     comparison
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Save all models for later investigation
+    """)
+    return
+
+
+@app.cell
+def _(
+    CatBoostRegressor,
+    CountVectorizer,
+    ElasticNet,
+    NuSVR,
+    Path,
+    Pipeline,
+    Ridge,
+    StandardScaler,
+    TfidfTransformer,
+    study_cat_boost,
+    study_elastic_net,
+    study_elastic_net_emb,
+    study_nusvr,
+    study_nusvr_emb,
+    study_ridge,
+    study_ridge_emb,
+):
+    import joblib
+    from dataclasses import dataclass
+    from typing import Any
+    from optuna.study import Study
+
+    MODELS_DIR = Path("thinking_space/score_jd/models")
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # optuna's study.best_params is one flat dict mixing preprocessor and regressor
+    # hyperparameters (every trial.suggest_* call in the objective lands in it,
+    # regardless of which pipeline step it configures) — this is the key set used to
+    # split the two back apart.
+    BOW_PREPROCESSOR_KEYS = {"min_df", "max_df", "max_features", "max_ngram", "use_idf", "sublinear_tf"}
+
+    def identity(x):
+        return x
+
+    def build_bow_preprocessor(params):
+        vectorizer = CountVectorizer(
+            tokenizer=identity,
+            preprocessor=identity,
+            token_pattern=None,
+            binary=True,
+            min_df=params["min_df"],
+            max_df=params["max_df"],
+            max_features=params["max_features"],
+            ngram_range=(1, params["max_ngram"]),
+        )
+
+        tfidf_transformer = TfidfTransformer(
+            norm="l2",
+            use_idf=params["use_idf"],
+            sublinear_tf=params["sublinear_tf"],
+        )
+
+        return Pipeline([
+            ("vectorize", vectorizer),
+            ("tfidf", tfidf_transformer),
+        ])
+
+    @dataclass
+    class ModelToSave:
+        output_file_path: Path
+        preprocessor: Any
+        regressor: Any
+        optuna_study: Study
+
+        def fit_save(self, X, y):
+            model = self.fit_model(X, y)
+        
+            joblib.dump(model, self.output_file_path)
+            print(f"Model is saved to {self.output_file_path}")
+
+        def fit_model(self, X, y):
+            best_params = self.optuna_study.best_params
+            preprocessor_params = {k: v for k, v in best_params.items() if k in BOW_PREPROCESSOR_KEYS}
+            regressor_params = {k: v for k, v in best_params.items() if k not in BOW_PREPROCESSOR_KEYS}
+
+            model = Pipeline([
+                ("preprocessor", self.preprocessor(preprocessor_params)),
+                ("regressor", self.regressor(**regressor_params))
+            ])
+
+            model.fit(X, y)
+            return model
+
+    models_to_save = {
+        "bow": [
+            ModelToSave(
+                output_file_path=MODELS_DIR / "bow_ridge_v1.joblib",
+                preprocessor=build_bow_preprocessor,
+                regressor=Ridge,
+                optuna_study=study_ridge
+            ),
+            ModelToSave(
+                output_file_path=MODELS_DIR / "bow_elasticnet_v1.joblib",
+                preprocessor=build_bow_preprocessor,
+                regressor=ElasticNet,
+                optuna_study=study_elastic_net
+            ),
+            ModelToSave(
+                output_file_path=MODELS_DIR / "bow_nusvr_v1.joblib",
+                preprocessor=build_bow_preprocessor,
+                regressor=NuSVR,
+                optuna_study=study_nusvr
+            ),
+            ModelToSave(
+                output_file_path=MODELS_DIR / "bow_catboost_v1.joblib",
+                preprocessor=build_bow_preprocessor,
+                regressor=CatBoostRegressor,
+                optuna_study=study_cat_boost
+            )
+        ],
+        "emb": [
+            ModelToSave(
+                output_file_path=MODELS_DIR / "emb_ridge_v1.joblib",
+                preprocessor=lambda params: StandardScaler(),
+                regressor=Ridge,
+                optuna_study=study_ridge_emb
+            ),
+            ModelToSave(
+                output_file_path=MODELS_DIR / "emb_elasticnet_v1.joblib",
+                preprocessor=lambda params: StandardScaler(),
+                regressor=ElasticNet,
+                optuna_study=study_elastic_net_emb
+            ),
+            ModelToSave(
+                output_file_path=MODELS_DIR / "emb_nusvr_v1.joblib",
+                preprocessor=lambda params: StandardScaler(),
+                regressor=NuSVR,
+                optuna_study=study_nusvr_emb
+            )
+        ]
+    }
+    return (models_to_save,)
+
+
+@app.cell
+def _(X_emb, jd_table, models_to_save):
+    for model_to_save in models_to_save["bow"]:
+        model_to_save.fit_save(X=jd_table["tokens"], y=jd_table["Score"])
+
+    for model_to_save in models_to_save["emb"]:
+        model_to_save.fit_save(X=X_emb, y=jd_table["Score"])
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # Visualization
+    """)
+    return
+
+
+@app.cell
+def _(X_emb, jd_table, models_to_save):
+    nusvr_predictions = models_to_save["emb"][2].fit_model(X=X_emb, y=jd_table["Score"]).predict(X_emb)
+    return (nusvr_predictions,)
+
+
+@app.cell
+def _(jd_table, nusvr_predictions):
+    import seaborn as sns
+
+    ax = sns.scatterplot(x=jd_table["Score"], y=nusvr_predictions)
+    ax.axline((0, 0), slope=1, color="red", linestyle="--", label="1:1 Reference")
+    ax.set_ylabel("Predicted Score")
+    return
+
+
+@app.cell
+def _(jd_table, nusvr_predictions):
+    jd_table_nusvr = jd_table.copy()
+    jd_table_nusvr["nusvr_pred"] = nusvr_predictions
+    jd_table_nusvr["pred_vs_score"] = jd_table_nusvr["nusvr_pred"] - jd_table_nusvr["Score"]
+    jd_table_nusvr
+    return
+
+
+@app.cell
+def _():
     return
 
 
