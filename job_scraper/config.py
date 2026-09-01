@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -42,6 +42,10 @@ class KeywordConfig:
     include_patterns: list[re.Pattern]
     exclude_patterns: list[re.Pattern]
     match_fields: list[str]
+    # Title phrases that mark a posting as a non-bioinformatics role (sales, marketing,
+    # etc). Used to skip the description fallback so a company's "About Us" boilerplate
+    # (e.g. "...expertise in NGS...") doesn't count a Sales/Marketing posting as relevant.
+    off_topic_title_patterns: list[re.Pattern] = field(default_factory=list)
 
 
 @dataclass
@@ -82,16 +86,23 @@ def load_keywords(config_dir: Path | str) -> KeywordConfig:
         raw = yaml.safe_load(f)
 
     flags = 0 if raw.get("case_sensitive", False) else re.IGNORECASE
-    # Require word boundaries around each pattern so short acronyms (e.g. "NGS", "STAR")
-    # don't match as a substring inside unrelated words (e.g. "savings", "Started").
-    include_patterns = [re.compile(r"\b(?:" + p + r")\b", flags) for p in raw.get("include", [])]
-    exclude_patterns = [re.compile(r"\b(?:" + p + r")\b", flags) for p in raw.get("exclude", [])]
+
+    def compile_all(key: str) -> list[re.Pattern]:
+        # Require word boundaries around each pattern so short acronyms (e.g. "NGS",
+        # "STAR") don't match as a substring inside unrelated words (e.g. "savings",
+        # "Started").
+        return [re.compile(r"\b(?:" + p + r")\b", flags) for p in raw.get(key, [])]
+
+    include_patterns = compile_all("include")
+    exclude_patterns = compile_all("exclude")
+    off_topic_title_patterns = compile_all("off_topic_titles")
     match_fields = raw.get("match_fields", ["title", "description"])
 
     return KeywordConfig(
         include_patterns=include_patterns,
         exclude_patterns=exclude_patterns,
         match_fields=match_fields,
+        off_topic_title_patterns=off_topic_title_patterns,
     )
 
 

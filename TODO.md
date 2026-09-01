@@ -117,19 +117,30 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
 
 ## Filtering quality
 
-- [ ] **Reduce boilerplate false positives in keyword filtering.** Substring matching against
+- [x] **Reduce boilerplate false positives in keyword filtering.** Substring matching against
       full job descriptions catches a company's "About Us" blurb, not just role-specific text —
       e.g. a Sales or Finance posting at 10x Genomics matches because the company description
       mentions "genomics"/"NGS". A word-boundary bug (bare acronyms like `NGS`/`STAR` matching
       inside unrelated words like "savings"/"Started") was already fixed in `job_scraper/config.py`
-      during MVP verification, but boilerplate matching remains noisy. Options to try: weight
-      title matches above description matches, strip a known "About [Company]" preamble before
-      matching, or only fall back to description matching when the title doesn't clearly
-      indicate role type.
-- [ ] **Tune `config/keywords.yaml` based on real results** — after a few days of real DAG runs,
-      review `SELECT * FROM job_postings WHERE is_relevant=1` for false positives/negatives and
-      adjust `include`/`exclude`. Run `python -m job_scraper.filtering.backfill` after changes to
-      reclassify existing rows.
+      during MVP verification, but boilerplate matching remained noisy. Fixed by scoping: an
+      `include` match in the title returns relevant immediately; otherwise a new
+      `off_topic_titles` list in `config/keywords.yaml` (Sales, Marketing, Business Development,
+      Investor Relations, Communications Manager, Recruiter, Talent Acquisition, Human Resources,
+      Mechanical Engineer) skips the description fallback, so boilerplate text can't make a
+      clearly non-bioinformatics posting relevant — confirmed against the live DB: 10x Genomics'
+      "Channel Sales Account Executive", "District Sales Manager", "Regional Marketing Manager",
+      and Generate Biomedicines' "Head of Investor Relations" / "...Communications Manager" all
+      dropped out of `is_relevant=1`. See `job_scraper/filtering/keyword_filter.py` and
+      `tests/filtering/test_keyword_filter.py`.
+- [x] **Tune `config/keywords.yaml` based on real results.** Reviewed `SELECT * FROM
+      job_postings WHERE is_relevant=1`/`=0` against the live DB (751 rows, 7 real DAG runs).
+      Found two include-pattern false negatives, not just false positives: `bioinformatics`
+      didn't match "Bioinformatician"/"Bioinformaticist" titles (63 rows misclassified), and
+      `computational biolog(?:y|ist)` didn't match the plural "computational biologists" —
+      both broadened (`bioinformatic(?:s|ian|ist)`, `computational biolog(?:y|ists?)`). Ran
+      `python -m job_scraper.filtering.backfill` against `data/jobs.db` afterward — 751 rows
+      recomputed, `is_relevant=1` went from 396 to 457 (net gain from the bioinformatician fix
+      outweighing the boilerplate removals).
 
 ## Cross-source dedup
 

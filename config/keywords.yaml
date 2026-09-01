@@ -1,7 +1,7 @@
 include:
   # Core role titles
-  - bioinformatics
-  - "computational biolog(?:y|ist)"  # matches computational biology/biologist
+  - "bioinformatic(?:s|ian|ist)"  # matches bioinformatics/bioinformatician/bioinformaticist
+  - "computational biolog(?:y|ists?)"  # matches computational biology/biologist/biologists
   - "clinical bioinformatics"
   - "genomics data scientist"
   - "genomics data engineer"
@@ -49,5 +49,20 @@ include:
   - "transcription factor binding"
 exclude:
   - "data entry"
+# Title phrases that mark a posting as a non-bioinformatics function. When the title
+# doesn't itself match an `include` keyword, one of these skips the description
+# fallback — otherwise a company's "About Us"/benefits boilerplate mentioning a keyword
+# (e.g. "...expertise in NGS...") would make a Sales or Marketing posting relevant.
+off_topic_titles:
+  - sales
+  - "account executive"
+  - marketing
+  - "business development"
+  - "investor relations"
+  - "communications manager"
+  - recruiter
+  - "talent acquisition"
+  - "human resources"
+  - "mechanical engineer"
 match_fields: [title, description]
 case_sensitive: false

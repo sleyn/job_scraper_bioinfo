@@ -28,6 +28,7 @@ def cfg():
         include_patterns=[re.compile(p, re.IGNORECASE) for p in ["bioinformatics", "NGS"]],
         exclude_patterns=[re.compile(p, re.IGNORECASE) for p in ["data entry"]],
         match_fields=["title", "description"],
+        off_topic_title_patterns=[re.compile(r"\bsales\b", re.IGNORECASE)],
     )
 
 
@@ -47,5 +48,31 @@ def test_exclude_overrides_include(cfg):
 
 
 def test_match_in_description(cfg):
+    posting = _posting(title="Scientist II", description="Experience with NGS pipelines required")
+    assert is_relevant(posting, cfg) is True
+
+
+def test_off_topic_title_blocks_boilerplate_description_match(cfg):
+    """A Sales posting at a genomics company whose "About Us" boilerplate mentions NGS
+    should not count as relevant just because the keyword happens to be in the
+    description somewhere."""
+    posting = _posting(
+        title="Channel Sales Account Executive",
+        description="Utilizing your strong technical expertise in NGS and/or single-cell...",
+    )
+    assert is_relevant(posting, cfg) is False
+
+
+def test_title_include_match_wins_even_with_off_topic_words_in_description(cfg):
+    posting = _posting(
+        title="Bioinformatics Scientist",
+        description="Supports the Sales and Marketing teams with pipeline QC.",
+    )
+    assert is_relevant(posting, cfg) is True
+
+
+def test_non_off_topic_title_still_falls_back_to_description(cfg):
+    """A generic title (not off-topic, not itself an include match) still falls back to
+    a genuine description-only match — off-topic scoping shouldn't over-exclude."""
     posting = _posting(title="Scientist II", description="Experience with NGS pipelines required")
     assert is_relevant(posting, cfg) is True
