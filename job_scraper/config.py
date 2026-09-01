@@ -35,6 +35,11 @@ class CompanyEntry:
     tenant: str | None
     careers_url: str
     notes: str
+    # Workday-only: the CXS career site slug (e.g. "illumina-careers") and the wdN
+    # subdomain (e.g. "wd1") -- both vary per tenant, so they're stored alongside
+    # tenant rather than derived.
+    site: str | None = None
+    wd_subdomain: str | None = None
 
 
 @dataclass
@@ -75,6 +80,8 @@ def load_companies(config_dir: Path | str) -> list[CompanyEntry]:
                 tenant=row["tenant"] or None,
                 careers_url=row["careers_url"],
                 notes=row["notes"],
+                site=row.get("site") or None,
+                wd_subdomain=row.get("wd_subdomain") or None,
             )
             for row in reader
         ]

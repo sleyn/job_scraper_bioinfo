@@ -93,13 +93,20 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
       companies dropped from the seed list earlier for lacking Ashby support, see "Data
       quality / seed list" below). Unit tests in `tests/ats/test_ashby.py`. Manually verified:
       `run_source('ashby', ...)` landed 65 real postings in `data/jobs.db` (11 `is_relevant=1`).
-- [ ] **Workday scraper** (`job_scraper/ats/workday.py`). More involved than the others:
-      `POST https://{company}.wdN.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs` with JSON body
-      `{appliedFacets, limit, offset, searchText}`, offset-paginated (`wdN` subdomain varies per
-      tenant — wd1/wd3/wd5 — verify per company). The list endpoint only gives `title`, `location`,
-      `externalPath`; need a second `GET /wday/cxs/{tenant}/{site}/job/{externalPath}` per posting
-      for the full description. Consider a small thread pool for the per-job fetches given the
-      2-call-per-posting pattern.
+- [x] **Workday scraper** (`job_scraper/ats/workday.py`). `POST .../wday/cxs/{tenant}/{site}/jobs`
+      with `{appliedFacets, limit, offset, searchText}`, offset-paginated (`wdN` subdomain and
+      `site` slug verified per company — `config/companies.csv` gained `site`/`wd_subdomain`
+      columns); the URL's `{company}` subdomain segment reuses the `{tenant}` slug, so no
+      separate field was needed for it. Detail description fetched per posting via a small
+      thread pool (`GET {cxs_base}{externalPath}`) given the 2-call-per-posting pattern.
+      Pagination stops on a short page rather than trusting the response's `total`, since
+      some tenants (Illumina) only report an accurate `total` on the first page. Wired into
+      `job_scraper/pipeline.py` (own `_fetch_workday_postings`, doesn't fit the shared
+      `_fetch_ats_postings` 2-arg shape) and a `scrape_workday_task()` in the DAG; `workday`
+      is a supported `ats_type` in `config/companies.csv` (Illumina, verified 2026-09-01, 154
+      jobs). Unit tests in `tests/ats/test_workday.py`. Manually verified: `run_source('workday',
+      ...)` landed 154 real postings in `data/jobs.db` (38 `is_relevant=1`). See
+      `.scratch/todo-backlog-2026-09/issues/05-workday-scraper.md`.
 
 ## Niche bio job boards
 
@@ -119,7 +126,7 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
       corrected. Verified with `python scripts/verify_companies.py` (16 jobs) and a manual
       `run_source('greenhouse', ...)` run that persisted 16 real Vir postings to the DB.
 - [ ] **Expand the seed list** as you find more target companies — add rows to `companies.csv`
-      with `ats_type=greenhouse`, `lever`, or `ashby` (or `workday` once that scraper exists).
+      with `ats_type=greenhouse`, `lever`, `ashby`, or `workday`.
 
 ## Filtering quality
 
