@@ -64,22 +64,19 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
       permanently-expired postings — not near zero in absolute count, but zero recoverable
       ones remain.
 
-- [ ] **Scoring fails opaquely when the model artifacts are absent.** `config/scoring/*.joblib`
-      is gitignored, so a fresh clone has no model and `score_postings()` dies on a bare
-      `joblib.load` `FileNotFoundError` pointing at a path, with nothing saying "run
-      train_export first". Every other missing input in this pipeline fails loudly and by
-      name (`_required_env_path`, the two loader raises); this one should match.
-- [ ] **Nothing checks the artifacts against the configured embedding revision.**
-      `scoring.yaml` pins `embedding_model_revision` to the revision the current regressor was
-      fitted on, but that pin is a declaration only — re-pin it without re-running
-      `train_export` and scoring proceeds against a feature space the model never saw, with no
-      error. Storing the revision alongside the artifacts at export and comparing on load
-      would make the mismatch visible instead of silent.
-- [ ] **The revision pin does not cover the custom architecture code.** `revision=` reaches
-      `nomic-ai/nomic-embed-text-v1.5` only; the `trust_remote_code=True` modelling code comes
-      from `nomic-ai/nomic-bert-2048`, which is pinned by nothing but `HF_HUB_OFFLINE=1` and
-      whatever happens to sit in the cache. A machine with a different cache can produce
-      different features from the same config.
+- [x] **Scoring fails opaquely when the model artifacts are absent.** `_require_artifacts()`
+      in `job_scraper/scoring/embedding_scorer.py` now raises a named `FileNotFoundError`
+      pointing at `python -m job_scraper.scoring.train_export` instead of a bare
+      `joblib.load` traceback.
+- [x] **Nothing checks the artifacts against the configured embedding revision.**
+      `train_export.py` now records a fingerprint (`save_fingerprint(model_fingerprint(...))`)
+      alongside the exported artifacts; `score_postings()` calls `_check_fingerprint()` before
+      scoring and raises `ArtifactMismatchError` on any mismatch, naming the differing fields.
+- [x] **The revision pin does not cover the custom architecture code.** The fingerprint
+      includes `modeling_code_revision`, extracted from the locally-resolved
+      `trust_remote_code` module path (`_extract_modeling_revision`), not just the
+      `nomic-embed-text-v1.5` weights revision — so a `nomic-bert-2048` cache change is
+      caught too. Covered by `tests/scoring/test_embedding_scorer.py`.
 
 ## New ATS sources
 
