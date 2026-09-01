@@ -110,10 +110,11 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
 
 ## Data quality / seed list
 
-- [ ] **Fix unverified companies in `config/companies.csv`** — Benchling, Insitro, and Vir
-      Biotechnology are flagged `UNVERIFIED` (guessed Greenhouse board tokens return 404).
-      Check their actual careers page to find the real ATS (may not be Greenhouse at all) and
-      correct the row, or drop it. Re-run `python scripts/verify_companies.py` after.
+- [x] **Fix unverified companies in `config/companies.csv`.** Benchling and Insitro are on
+      Ashby, which this repo doesn't support yet (see "New ATS sources" below) — dropped. Vir
+      Biotechnology's real Greenhouse token is `virbiotechnologyinc`, not the guessed `vir` —
+      corrected. Verified with `python scripts/verify_companies.py` (16 jobs) and a manual
+      `run_source('greenhouse', ...)` run that persisted 16 real Vir postings to the DB.
 - [ ] **Expand the seed list** as you find more target companies — add rows to `companies.csv`
       with `ats_type=greenhouse` (or `lever`/`ashby`/`workday` once those scrapers exist).
 
