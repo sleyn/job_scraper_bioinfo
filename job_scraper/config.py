@@ -52,6 +52,7 @@ class ScoringConfig:
     reference_cache_path: Path
     regressor_path: Path
     scaler_path: Path
+    fingerprint_path: Path
     jd_scores_csv: Path | None
     jd_dir: Path | None = None
     embedding_model_revision: str | None = None
@@ -122,6 +123,11 @@ def load_scoring_config(config_dir: Path | str) -> ScoringConfig:
         reference_cache_path=repo_root / raw["reference_cache_path"],
         regressor_path=repo_root / raw["regressor_path"],
         scaler_path=repo_root / raw["scaler_path"],
+        # Where train_export.py records the embedding setup the regressor/scaler were
+        # fitted on, so scoring can refuse to run against a setup that has since
+        # changed. Not required in scoring.yaml (defaults alongside the artifacts) so
+        # existing configs don't need editing to pick this up.
+        fingerprint_path=repo_root / raw.get("fingerprint_path", "config/scoring/fingerprint.json"),
         jd_scores_csv=_expand_path(jd_scores_csv) if jd_scores_csv else None,
         # The directory holding one <name>/jd.md per scored row. Its own var rather
         # than the CSV's parent: the two need not sit together, and deriving one from
