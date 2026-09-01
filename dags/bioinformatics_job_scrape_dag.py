@@ -23,6 +23,20 @@ def bioinformatics_job_scrape_dag():
         print(f"greenhouse: {stats}")
 
     @task
+    def scrape_lever_task():
+        from job_scraper.pipeline import run_source
+
+        stats = run_source("lever", CONFIG_DIR, DB_PATH)
+        print(f"lever: {stats}")
+
+    @task
+    def scrape_ashby_task():
+        from job_scraper.pipeline import run_source
+
+        stats = run_source("ashby", CONFIG_DIR, DB_PATH)
+        print(f"ashby: {stats}")
+
+    @task
     def scrape_jobspy_task():
         from job_scraper.pipeline import run_source
 
@@ -37,9 +51,11 @@ def bioinformatics_job_scrape_dag():
         print(f"scoring: {stats}")
 
     gh = scrape_greenhouse_task()
+    lv = scrape_lever_task()
+    ab = scrape_ashby_task()
     js = scrape_jobspy_task()
     sc = score_postings_task()
-    [gh, js] >> sc
+    [gh, lv, ab, js] >> sc
 
 
 bioinformatics_job_scrape_dag()

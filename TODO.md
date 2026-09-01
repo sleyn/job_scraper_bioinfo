@@ -80,13 +80,19 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
 
 ## New ATS sources
 
-- [ ] **Lever scraper** (`job_scraper/ats/lever.py`). `GET https://api.lever.co/v0/postings/{company}?mode=json`.
-      Returns `text` (title), `descriptionPlain`, `categories`, `location`, `hostedUrl`. Follow
-      the `greenhouse.py` pattern: pure function `fetch_lever(company_slug, company_name) -> list[JobPosting]`,
-      no DB/filtering logic. Add a `scrape_lever_task()` to the DAG and a `lever` row type to
-      `config/companies.csv` (already has a spare `ats_type` column for this).
-- [ ] **Ashby scraper** (`job_scraper/ats/ashby.py`). `GET https://api.ashbyhq.com/posting-api/job-board/{company}?includeCompensation=true`.
-      Returns `title`, `location`, `descriptionPlain`, `publishedAt`, `jobUrl`. Same pattern as above.
+- [x] **Lever scraper** (`job_scraper/ats/lever.py`). `fetch_lever(company_slug, company_name) ->
+      list[JobPosting]`, pure function following the `greenhouse.py` pattern. Wired into
+      `job_scraper/pipeline.py` (`_fetch_ats_postings` shared by all three ATS sources) and a
+      `scrape_lever_task()` in the DAG; `lever` is a supported `ats_type` in
+      `config/companies.csv` (Deep Genomics, verified 2026-09-01, 3 jobs). Unit tests in
+      `tests/ats/test_lever.py`. Manually verified: `run_source('lever', ...)` landed 3 real
+      postings in `data/jobs.db`. See `.scratch/todo-backlog-2026-09/issues/04-lever-ashby-scrapers.md`.
+- [x] **Ashby scraper** (`job_scraper/ats/ashby.py`). Same pattern as Lever above. `scripts/verify_companies.py`
+      generalized to dispatch by `ats_type` for both new sources. `config/companies.csv` gained
+      Benchling and Insitro (both ashby, verified 2026-09-01, 49 + 16 jobs — the same two
+      companies dropped from the seed list earlier for lacking Ashby support, see "Data
+      quality / seed list" below). Unit tests in `tests/ats/test_ashby.py`. Manually verified:
+      `run_source('ashby', ...)` landed 65 real postings in `data/jobs.db` (11 `is_relevant=1`).
 - [ ] **Workday scraper** (`job_scraper/ats/workday.py`). More involved than the others:
       `POST https://{company}.wdN.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs` with JSON body
       `{appliedFacets, limit, offset, searchText}`, offset-paginated (`wdN` subdomain varies per
@@ -113,7 +119,7 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
       corrected. Verified with `python scripts/verify_companies.py` (16 jobs) and a manual
       `run_source('greenhouse', ...)` run that persisted 16 real Vir postings to the DB.
 - [ ] **Expand the seed list** as you find more target companies — add rows to `companies.csv`
-      with `ats_type=greenhouse` (or `lever`/`ashby`/`workday` once those scrapers exist).
+      with `ats_type=greenhouse`, `lever`, or `ashby` (or `workday` once that scraper exists).
 
 ## Filtering quality
 

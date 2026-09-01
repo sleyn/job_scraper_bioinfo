@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from job_scraper.aggregators.jobspy_source import fetch_jobspy
+from job_scraper.ats.ashby import fetch_ashby
 from job_scraper.ats.greenhouse import fetch_greenhouse
+from job_scraper.ats.lever import fetch_lever
 from job_scraper.config import load_companies, load_keywords, load_scoring_config, load_settings
 from job_scraper.db.repository import (
     RunStats,
@@ -19,7 +21,7 @@ from job_scraper.filtering.keyword_filter import is_relevant
 from job_scraper.models import JobPosting
 from job_scraper.scoring.embedding_scorer import score_postings as embed_score_postings
 
-SUPPORTED_SOURCES = ("greenhouse", "jobspy")
+SUPPORTED_SOURCES = ("greenhouse", "lever", "ashby", "jobspy")
 
 
 @dataclass
@@ -28,19 +30,29 @@ class ScoreStats:
     scored_count: int
 
 
-def _fetch_greenhouse_postings(config_dir: Path) -> list[JobPosting]:
+def _fetch_ats_postings(config_dir: Path, ats_type: str, fetch_fn) -> list[JobPosting]:
     companies = load_companies(config_dir)
     postings: list[JobPosting] = []
     for company in companies:
-        if company.ats_type != "greenhouse":
+        if company.ats_type != ats_type:
             continue
         try:
-            postings.extend(
-                fetch_greenhouse(company.board_identifier, company.company_name)
-            )
+            postings.extend(fetch_fn(company.board_identifier, company.company_name))
         except Exception as exc:
             print(f"WARN: skipping {company.company_name} ({company.board_identifier}): {exc}")
     return postings
+
+
+def _fetch_greenhouse_postings(config_dir: Path) -> list[JobPosting]:
+    return _fetch_ats_postings(config_dir, "greenhouse", fetch_greenhouse)
+
+
+def _fetch_lever_postings(config_dir: Path) -> list[JobPosting]:
+    return _fetch_ats_postings(config_dir, "lever", fetch_lever)
+
+
+def _fetch_ashby_postings(config_dir: Path) -> list[JobPosting]:
+    return _fetch_ats_postings(config_dir, "ashby", fetch_ashby)
 
 
 def _fetch_jobspy_postings(config_dir: Path) -> list[JobPosting]:
@@ -66,6 +78,10 @@ def run_source(source_type: str, config_dir: str | Path, db_path: str | Path) ->
     try:
         if source_type == "greenhouse":
             postings = _fetch_greenhouse_postings(config_dir)
+        elif source_type == "lever":
+            postings = _fetch_lever_postings(config_dir)
+        elif source_type == "ashby":
+            postings = _fetch_ashby_postings(config_dir)
         else:
             postings = _fetch_jobspy_postings(config_dir)
 
