@@ -9,14 +9,23 @@ description = "Personal bioinformatics job search scraper"
 requires-python = ">=3.11"
 dependencies = [
     "beautifulsoup4>=4.15.0",
-    "einops>=0.8.2",
     "joblib>=1.5.3",
     "numpy>=1.26.3",
-    "optuna>=4.9.0",
     "pandas>=2.3.3",
     "python-jobspy>=1.1.82",
     "pyyaml>=6.0.3",
     "requests>=2.34.2",
+]
+
+[project.optional-dependencies]
+# job_scraper/scoring/'s ML stack — not needed by the scrape/filter pipeline or the (future)
+# lean web triage UI, so the Airflow image (Dockerfile) installs this extra explicitly instead
+# of carrying it as an unconditional core dependency. einops isn't imported directly by
+# job_scraper — it's a runtime requirement of the configured embedding model's
+# trust_remote_code modelling code (see config/scoring.yaml).
+scoring = [
+    "einops>=0.8.2",
+    "optuna>=4.9.0",
     "scikit-learn>=1.9.0",
     "scipy>=1.16.3",
     "sentence-transformers>=3.0",
@@ -24,7 +33,10 @@ dependencies = [
     "transformers>=5.3.0",
 ]
 
-[project.optional-dependencies]
+# Placeholder for the web triage UI's dependencies (job_scraper/web/) — populated in a later
+# ticket. It never needs the `scoring` extra's ML stack.
+web = []
+
 # Only used by the thinking_space/score_jd/score.py marimo notebook — never imported by
 # job_scraper itself, so the Airflow image (Dockerfile) installs the package without this
 # extra to avoid pulling ~3 unused packages into the scoring container.

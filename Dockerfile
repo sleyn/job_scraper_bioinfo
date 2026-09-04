@@ -8,4 +8,4 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 
 COPY pyproject.toml /opt/airflow/pyproject.toml
 COPY job_scraper /opt/airflow/job_scraper
-RUN pip install --no-cache-dir -e /opt/airflow
+RUN pip install --no-cache-dir -e "/opt/airflow[scoring]"
