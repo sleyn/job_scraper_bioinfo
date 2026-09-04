@@ -21,21 +21,22 @@ list, orchestrated by a daily Airflow DAG running in Docker.
 - Pipeline is three stages: scrape (per-source fetch) → filter (`is_relevant`, cheap keyword
   pre-filter) → score (`job_scraper/scoring/`, expensive ML fit-prediction, second stage). Scoring
   is intended to run only on `is_relevant = true` postings — see `CONTEXT.md` for the domain model
-  (Score, Hand-scored JD, Targeting Screen) and `TODO.md`'s "Scoring" section for what's still
-  unwired.
+  (Score, Hand-scored JD, Targeting Screen) and `TODO.md`'s "Scoring" section for remaining
+  follow-ups.
 
 ## MVP scope
 
-This is intentionally an MVP: only Greenhouse (ATS-direct) and JobSpy (aggregator boards) are
-implemented for sourcing, plus embedding-based ML scoring of relevant postings. Lever, Ashby,
-Workday, and niche bio job boards (BioSpace, Naturejobs, etc.) are deferred extension points, not
-unfinished work — `job_scraper/ats/base.py` and the `JobPosting` data model are designed so each
-new source drops in as a new fetch function + one new DAG task, without touching storage or
+This is intentionally an MVP: Greenhouse, Lever, Ashby, and Workday (ATS-direct) plus JobSpy
+(aggregator boards) are implemented for sourcing, plus embedding-based ML scoring of relevant
+postings. Niche bio job boards (BioSpace, Naturejobs, etc.) are the remaining deferred extension
+point, not unfinished work — `job_scraper/ats/base.py` and the `JobPosting` data model are designed
+so each new source drops in as a new fetch function + one new DAG task, without touching storage or
 filtering code. See `TODO.md` for the full deferred-work roadmap.
 
-Scoring is core to this repo's purpose, not a deferred extra, but the `ML_JD_scoring` branch's
-integration work (DAG wiring, `is_relevant` gating, exported model artifacts) is still in
-progress — see `TODO.md`.
+Scoring is core to this repo's purpose, not a deferred extra, and its integration (DAG wiring,
+`is_relevant` gating, exported model artifacts, artifact-fingerprint checks) is done and verified
+against the live DB — see `TODO.md`'s "Scoring" section for the one remaining follow-up (container
+scoring latency).
 
 ## Project Structure
 
