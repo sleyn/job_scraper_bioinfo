@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 
 import joblib
@@ -11,8 +12,20 @@ from job_scraper.config import ScoringConfig
 
 _model_cache: dict[tuple[str, str | None], SentenceTransformer] = {}
 
+# The locally-resolved commit hash `transformers` bakes into the dynamic module path
+# it generates for `trust_remote_code` modelling code, e.g.
+# "transformers_modules.nomic-ai.nomic-bert-2048.<hash>.modeling_hf_nomic_bert".
+_MODELING_REVISION_RE = re.compile(r"^[0-9a-f]{8,64}$")
 
-def _load_embedding_model(model_name: str, revision: str | None = None) -> SentenceTransformer:
+
+class ArtifactMismatchError(RuntimeError):
+    """Raised when the exported regressor/scaler don't match the currently configured
+    embedding setup — e.g. scoring.yaml's revision was edited without re-running
+    train_export, or the trust_remote_code modelling module resolved to a different
+    local cache entry than the one the artifacts were fitted against."""
+
+
+def load_embedding_model(model_name: str, revision: str | None = None) -> SentenceTransformer:
     """Loads the embedding model, pinned to `revision` when scoring.yaml declares one.
 
     The revision matters more than it looks: the exported regressor and scaler are fitted
@@ -90,11 +103,75 @@ def _load_reference_embeddings(
     return job_history_emb, resume_emb
 
 
+def _extract_modeling_revision(module_path: str) -> str | None:
+    """Pulls the locally-resolved commit hash for `trust_remote_code` modelling code out
+    of its dynamically generated module path. SentenceTransformer's `revision=` pin only
+    reaches the model weights' own repo; the custom architecture code
+    (`nomic-ai/nomic-bert-2048` for this model) comes from a separate repo pinned by
+    nothing but `HF_HUB_OFFLINE=1` and cache contents — this hash is the only record of
+    which version actually loaded."""
+    for part in module_path.split("."):
+        if _MODELING_REVISION_RE.fullmatch(part):
+            return part
+    return None
+
+
+def model_fingerprint(model: SentenceTransformer, cfg: ScoringConfig) -> dict[str, str | None]:
+    """Identifies the exact embedding setup `model` resolved to: the configured model
+    name/revision plus the locally-resolved weights and modelling-code commit hashes.
+    Compared against what train_export.py recorded, to catch a feature-space change the
+    exported regressor/scaler never saw."""
+    auto_model = model[0].auto_model
+    weights_config = getattr(auto_model, "config", None)
+    return {
+        "embedding_model": cfg.embedding_model,
+        "embedding_model_revision": cfg.embedding_model_revision,
+        "weights_commit_hash": getattr(weights_config, "_commit_hash", None),
+        "modeling_code_revision": _extract_modeling_revision(type(auto_model).__module__),
+    }
+
+
+def save_fingerprint(fingerprint: dict[str, str | None], cfg: ScoringConfig) -> None:
+    cfg.fingerprint_path.parent.mkdir(parents=True, exist_ok=True)
+    cfg.fingerprint_path.write_text(json.dumps(fingerprint, indent=2, sort_keys=True))
+
+
+def _require_artifacts(cfg: ScoringConfig) -> None:
+    missing = [p for p in (cfg.regressor_path, cfg.scaler_path) if not p.is_file()]
+    if missing:
+        names = ", ".join(str(p) for p in missing)
+        raise FileNotFoundError(
+            f"Scoring model artifact(s) not found: {names}. Run "
+            "`python -m job_scraper.scoring.train_export` to produce them."
+        )
+
+
+def _check_fingerprint(model: SentenceTransformer, cfg: ScoringConfig) -> None:
+    if not cfg.fingerprint_path.is_file():
+        raise ArtifactMismatchError(
+            f"No model fingerprint recorded at {cfg.fingerprint_path}. The exported "
+            "regressor/scaler predate fingerprint tracking. Re-run "
+            "`python -m job_scraper.scoring.train_export` to regenerate them together "
+            "with a fingerprint."
+        )
+    recorded = json.loads(cfg.fingerprint_path.read_text())
+    current = model_fingerprint(model, cfg)
+    mismatched = {k: (recorded.get(k), v) for k, v in current.items() if recorded.get(k) != v}
+    if mismatched:
+        detail = "; ".join(f"{k}: exported={old!r}, now={new!r}" for k, (old, new) in mismatched.items())
+        raise ArtifactMismatchError(
+            "Scoring model artifacts were exported against a different embedding setup "
+            f"than is currently configured ({detail}). Re-run "
+            "`python -m job_scraper.scoring.train_export` to re-export against the "
+            "current setup, or revert the config/cache change that caused this."
+        )
+
+
 def build_features(descriptions: list[str], cfg: ScoringConfig) -> np.ndarray:
     """Embeds `descriptions` and appends experience-fit features against MEMORY.md
     and the resume. Column layout: [768 embedding dims, fit_max, fit_top3, resume_cos] —
     must match the layout train_export.py fits the regressor/scaler on."""
-    model = _load_embedding_model(cfg.embedding_model, cfg.embedding_model_revision)
+    model = load_embedding_model(cfg.embedding_model, cfg.embedding_model_revision)
     job_history_emb, resume_emb = _load_reference_embeddings(model, cfg)
 
     jd_emb = _encode(model, descriptions, cfg.embedding_batch_size)
@@ -112,8 +189,13 @@ def score_postings(url_to_description: dict[str, str], cfg: ScoringConfig) -> di
     if not url_to_description:
         return {}
 
+    _require_artifacts(cfg)
+
     urls = list(url_to_description.keys())
     descriptions = [url_to_description[u] for u in urls]
+
+    model = load_embedding_model(cfg.embedding_model, cfg.embedding_model_revision)
+    _check_fingerprint(model, cfg)
 
     X = build_features(descriptions, cfg)
     scaler = joblib.load(cfg.scaler_path)

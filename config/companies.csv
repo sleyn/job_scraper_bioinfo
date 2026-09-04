@@ -1,8 +1,10 @@
-company_name,ats_type,board_identifier,tenant,careers_url,notes
-10x Genomics,greenhouse,10xgenomics,,https://www.10xgenomics.com/careers,verified 2026-06-22 - 28 jobs
-Recursion Pharmaceuticals,greenhouse,recursionpharmaceuticals,,https://www.recursion.com/careers,verified 2026-06-22 - 30 jobs
-Ginkgo Bioworks,greenhouse,ginkgobioworks,,https://www.ginkgobioworks.com/careers,verified 2026-06-22 - 13 jobs
-Benchling,greenhouse,benchling,,https://www.benchling.com/careers,UNVERIFIED - token 404s, may not be on Greenhouse - check careers page manually
-Insitro,greenhouse,insitro,,https://www.insitro.com/careers,UNVERIFIED - token 404s, may not be on Greenhouse - check careers page manually
-Generate Biomedicines,greenhouse,generatebiomedicines,,https://generatebiomedicines.com/careers,verified 2026-06-22 - 14 jobs
-Vir Biotechnology,greenhouse,vir,,https://www.vir.bio/careers,UNVERIFIED - token 404s, may not be on Greenhouse - check careers page manually
+company_name,ats_type,board_identifier,tenant,careers_url,notes,site,wd_subdomain
+10x Genomics,greenhouse,10xgenomics,,https://www.10xgenomics.com/careers,verified 2026-06-22 - 28 jobs,,
+Recursion Pharmaceuticals,greenhouse,recursionpharmaceuticals,,https://www.recursion.com/careers,verified 2026-06-22 - 30 jobs,,
+Ginkgo Bioworks,greenhouse,ginkgobioworks,,https://www.ginkgobioworks.com/careers,verified 2026-06-22 - 13 jobs,,
+Generate Biomedicines,greenhouse,generatebiomedicines,,https://generatebiomedicines.com/careers,verified 2026-06-22 - 14 jobs,,
+Vir Biotechnology,greenhouse,virbiotechnologyinc,,https://www.vir.bio/careers,verified 2026-09-01 - 16 jobs (corrected board token from vir),,
+Deep Genomics,lever,deepgenomics,,https://www.deepgenomics.com/careers/,verified 2026-09-01 - 3 jobs,,
+Benchling,ashby,benchling,,https://www.benchling.com/careers,verified 2026-09-01 - 49 jobs,,
+Insitro,ashby,insitro,,https://insitro.com/careers/,verified 2026-09-01 - 16 jobs,,
+Illumina,workday,,illumina,https://illumina.wd1.myworkdayjobs.com/illumina-careers,verified 2026-09-01 - 154 jobs,illumina-careers,wd1

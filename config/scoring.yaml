@@ -29,3 +29,11 @@ embedding_model_revision: e9b6763023c676ca8431644204f50c2b100d9aab
 reference_cache_path: data/scoring_reference_cache.npz
 regressor_path: config/scoring/regressor.joblib
 scaler_path: config/scoring/scaler.joblib
+
+# Written by train_export.py alongside the artifacts above, recording the exact
+# embedding setup (model, configured revision, and the locally-resolved commit hashes
+# for both the weights and the trust_remote_code modelling code) they were fitted on.
+# Scoring compares this against the current setup on every run and refuses to produce
+# scores on a mismatch, rather than silently scoring through a feature space the model
+# never saw.
+fingerprint_path: config/scoring/fingerprint.json

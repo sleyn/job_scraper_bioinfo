@@ -1,6 +1,6 @@
 import pytest
 
-from job_scraper.config import load_scoring_config
+from job_scraper.config import load_keywords, load_scoring_config
 
 
 def test_career_history_paths_come_from_env_vars(config_dir, tmp_path):
@@ -54,3 +54,21 @@ def test_env_var_path_expands_tilde(config_dir, monkeypatch):
     monkeypatch.setenv("JOB_HELPER_RESUME_PATH", "~/resume.md")
 
     assert load_scoring_config(config_dir).resume_path.as_posix() == "/home/tester/resume.md"
+
+
+def test_off_topic_titles_are_compiled_with_word_boundaries(config_dir):
+    (config_dir / "keywords.yaml").write_text(
+        "include: [bioinformatics]\nexclude: []\noff_topic_titles: [sales]\n"
+    )
+
+    cfg = load_keywords(config_dir)
+
+    assert len(cfg.off_topic_title_patterns) == 1
+    assert cfg.off_topic_title_patterns[0].search("Sales Manager")
+    assert not cfg.off_topic_title_patterns[0].search("Salesforce Engineer")
+
+
+def test_off_topic_titles_default_to_empty(config_dir):
+    (config_dir / "keywords.yaml").write_text("include: [bioinformatics]\nexclude: []\n")
+
+    assert load_keywords(config_dir).off_topic_title_patterns == []

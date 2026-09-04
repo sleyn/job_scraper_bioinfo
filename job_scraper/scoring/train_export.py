@@ -27,7 +27,12 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import NuSVR
 
 from job_scraper.config import ScoringConfig, load_scoring_config
-from job_scraper.scoring.embedding_scorer import build_features
+from job_scraper.scoring.embedding_scorer import (
+    build_features,
+    load_embedding_model,
+    model_fingerprint,
+    save_fingerprint,
+)
 
 _HEADER_RE = re.compile(r"^---\n(\w+: [^\n]+\n)+---\n+", flags=re.MULTILINE)
 
@@ -147,6 +152,13 @@ def train_export(config_dir: str | Path, regressor: str, n_trials: int) -> float
     cfg.scaler_path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(final_model, cfg.regressor_path)
     joblib.dump(scaler, cfg.scaler_path)
+
+    # Recorded alongside the artifacts so scoring can detect a feature-space change
+    # (a re-pinned revision, or a different local cache) they were never fitted on.
+    # build_features() above already loaded and cached this model, so this is a cache
+    # hit, not a second real load.
+    embedding_model = load_embedding_model(cfg.embedding_model, cfg.embedding_model_revision)
+    save_fingerprint(model_fingerprint(embedding_model, cfg), cfg)
 
     print(f"Exported {regressor} to {cfg.regressor_path} / {cfg.scaler_path}")
     return study.best_value

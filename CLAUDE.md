@@ -21,21 +21,22 @@ list, orchestrated by a daily Airflow DAG running in Docker.
 - Pipeline is three stages: scrape (per-source fetch) → filter (`is_relevant`, cheap keyword
   pre-filter) → score (`job_scraper/scoring/`, expensive ML fit-prediction, second stage). Scoring
   is intended to run only on `is_relevant = true` postings — see `CONTEXT.md` for the domain model
-  (Score, Hand-scored JD, Targeting Screen) and `TODO.md`'s "Scoring" section for what's still
-  unwired.
+  (Score, Hand-scored JD, Targeting Screen) and `TODO.md`'s "Scoring" section for remaining
+  follow-ups.
 
 ## MVP scope
 
-This is intentionally an MVP: only Greenhouse (ATS-direct) and JobSpy (aggregator boards) are
-implemented for sourcing, plus embedding-based ML scoring of relevant postings. Lever, Ashby,
-Workday, and niche bio job boards (BioSpace, Naturejobs, etc.) are deferred extension points, not
-unfinished work — `job_scraper/ats/base.py` and the `JobPosting` data model are designed so each
-new source drops in as a new fetch function + one new DAG task, without touching storage or
+This is intentionally an MVP: Greenhouse, Lever, Ashby, and Workday (ATS-direct) plus JobSpy
+(aggregator boards) are implemented for sourcing, plus embedding-based ML scoring of relevant
+postings. Niche bio job boards (BioSpace, Naturejobs, etc.) are the remaining deferred extension
+point, not unfinished work — `job_scraper/ats/base.py` and the `JobPosting` data model are designed
+so each new source drops in as a new fetch function + one new DAG task, without touching storage or
 filtering code. See `TODO.md` for the full deferred-work roadmap.
 
-Scoring is core to this repo's purpose, not a deferred extra, but the `ML_JD_scoring` branch's
-integration work (DAG wiring, `is_relevant` gating, exported model artifacts) is still in
-progress — see `TODO.md`.
+Scoring is core to this repo's purpose, not a deferred extra, and its integration (DAG wiring,
+`is_relevant` gating, exported model artifacts, artifact-fingerprint checks) is done and verified
+against the live DB — see `TODO.md`'s "Scoring" section for the one remaining follow-up (container
+scoring latency).
 
 ## Project Structure
 
@@ -52,6 +53,14 @@ job_scraper/
   pipeline.py              run_source(source_type, config_dir, db_path) — fetch -> filter -> upsert,
                            the single entry point both the DAG and manual scripts call; per-company
                            fetch failures are caught and logged, not fatal to the whole task
+  backfill_linkedin_descriptions.py   one-off CLI (python -m
+                           job_scraper.backfill_linkedin_descriptions): re-fetches descriptions for
+                           already-stored, empty-description LinkedIn rows one job id at a time (jobspy
+                           has no public single-job fetch, so this calls into
+                           jobspy.linkedin.LinkedIn's private _get_job_details), then re-runs the score
+                           stage; lives at this level rather than in ats/ or aggregators/ because,
+                           like pipeline.py, it orchestrates fetch + DB write + scoring rather than
+                           being a pure per-source fetcher
   db/
     schema.py               CREATE TABLE statements, init_db(), get_connection() (WAL mode, for
                              safe concurrent writes from parallel Airflow tasks)
@@ -98,8 +107,9 @@ tests/                       mirrors job_scraper/ layout; mocked HTTP for ats/, 
                              (tmp_path fixture) for db/
 docker-compose.yaml           local Airflow stack: postgres (Airflow's own metadata DB, separate
                              from data/jobs.db), airflow-init, airflow-webserver, airflow-scheduler
-Dockerfile                   extends apache/airflow, installs requirements.txt + editable
-                             job_scraper package
+Dockerfile                   extends apache/airflow, installs editable job_scraper package
+                             from pyproject.toml's core deps (no `[notebook]` extra — that's
+                             thinking_space-only and never imported by job_scraper)
 .env.example                  AIRFLOW_UID, AIRFLOW_FERNET_KEY — copy to .env before docker compose up
 data/jobs.db                  the actual SQLite output, gitignored — query directly, see README.md
 ```

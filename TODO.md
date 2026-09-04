@@ -31,47 +31,82 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
 - [x] **Migrate the live `data/jobs.db`.** Done by run `manual_verify_1`: the column was added
       in place, all rows preserved (751 postings, 396 relevant, 210 scored).
 
-- [ ] **JobSpy LinkedIn returns no descriptions.** All 373 LinkedIn rows in `data/jobs.db`
-      have an empty `description`; Indeed and Greenhouse rows are fine. JobSpy needs
-      `linkedin_fetch_description=True` (an extra request per posting, so it is slow and
-      rate-limit-prone — check whether the run still fits the daily schedule). Until then
-      those postings are never scored: `get_postings_missing_score()` skips empty
-      descriptions rather than scoring the embedding of an empty string, so they sit at
-      `score IS NULL`. That is 166 of 338 otherwise-relevant postings unassessed.
+- [x] **JobSpy LinkedIn returns no descriptions.** Fixed: `fetch_jobspy` now passes
+      `linkedin_fetch_description=True` to `scrape_jobs`. The scrape -> filter -> score chain
+      for a LinkedIn posting is covered by a repeatable test
+      (`tests/test_pipeline_jobspy_linkedin.py`: mocks `scrape_jobs` and
+      `embed_score_postings`, runs the real `run_source`/`score_pending_postings` path). Also
+      verified manually against a live LinkedIn scrape (not repeatable from the repo, numbers
+      recorded here for reference) — 5 postings, all with non-empty descriptions, all flowed
+      through `is_relevant` and were scored. Timing: ~1.1s per LinkedIn posting for the extra
+      description request (~35s for 30 results, one search term); with the production
+      `settings.yaml` (2 search terms x 1 location) that's ~70s added to the LinkedIn leg of a
+      daily run — well within the daily schedule, and no rate-limiting was hit across ~35
+      requests in that manual run. The 166 already-stored LinkedIn rows with empty
+      descriptions are not touched by this fix (a normal scrape only revisits postings within
+      `hours_old`) — backfilled separately, see below.
 
-- [ ] **Scoring fails opaquely when the model artifacts are absent.** `config/scoring/*.joblib`
-      is gitignored, so a fresh clone has no model and `score_postings()` dies on a bare
-      `joblib.load` `FileNotFoundError` pointing at a path, with nothing saying "run
-      train_export first". Every other missing input in this pipeline fails loudly and by
-      name (`_required_env_path`, the two loader raises); this one should match.
-- [ ] **Nothing checks the artifacts against the configured embedding revision.**
-      `scoring.yaml` pins `embedding_model_revision` to the revision the current regressor was
-      fitted on, but that pin is a declaration only — re-pin it without re-running
-      `train_export` and scoring proceeds against a feature space the model never saw, with no
-      error. Storing the revision alongside the artifacts at export and comparing on load
-      would make the mismatch visible instead of silent.
-- [ ] **The revision pin does not cover the custom architecture code.** `revision=` reaches
-      `nomic-ai/nomic-embed-text-v1.5` only; the `trust_remote_code=True` modelling code comes
-      from `nomic-ai/nomic-bert-2048`, which is pinned by nothing but `HF_HUB_OFFLINE=1` and
-      whatever happens to sit in the cache. A machine with a different cache can produce
-      different features from the same config.
+- [x] **Backfill descriptions for existing NULL-description LinkedIn rows.** Added
+      `python -m job_scraper.backfill_linkedin_descriptions`: re-fetches each
+      relevant, empty-description LinkedIn row's description directly by job id (via
+      `jobspy.linkedin.LinkedIn._get_job_details`, the same per-job request
+      `linkedin_fetch_description=True` makes internally — jobspy has no public single-job
+      API), updates it in place, then runs the score stage. Run live against `data/jobs.db`:
+      of 186 relevant, unscored LinkedIn rows, 88 got a real description and a score; the
+      other 98 came back empty because the posting itself has expired on LinkedIn
+      (`GET .../jobs/view/{id}` 200s to `.../jobs/<slug>-jobs?trk=expired_jd_redirect`, not an
+      error or rate limit — confirmed by hand for several ids). Those 98 can never be
+      backfilled — the description no longer exists anywhere to fetch — so they stay at
+      `score IS NULL` by the same rule that skips empty-description rows generally (see
+      `get_postings_missing_score`'s docstring): no description means no judgment is possible,
+      and that's the honest state, not a bug. `SELECT COUNT(*) FROM job_postings WHERE
+      is_relevant = 1 AND score IS NULL AND source LIKE 'jobspy:linkedin%'` is 98, all
+      permanently-expired postings — not near zero in absolute count, but zero recoverable
+      ones remain.
+
+- [x] **Scoring fails opaquely when the model artifacts are absent.** `_require_artifacts()`
+      in `job_scraper/scoring/embedding_scorer.py` now raises a named `FileNotFoundError`
+      pointing at `python -m job_scraper.scoring.train_export` instead of a bare
+      `joblib.load` traceback.
+- [x] **Nothing checks the artifacts against the configured embedding revision.**
+      `train_export.py` now records a fingerprint (`save_fingerprint(model_fingerprint(...))`)
+      alongside the exported artifacts; `score_postings()` calls `_check_fingerprint()` before
+      scoring and raises `ArtifactMismatchError` on any mismatch, naming the differing fields.
+- [x] **The revision pin does not cover the custom architecture code.** The fingerprint
+      includes `modeling_code_revision`, extracted from the locally-resolved
+      `trust_remote_code` module path (`_extract_modeling_revision`), not just the
+      `nomic-embed-text-v1.5` weights revision — so a `nomic-bert-2048` cache change is
+      caught too. Covered by `tests/scoring/test_embedding_scorer.py`.
 
 ## New ATS sources
 
-- [ ] **Lever scraper** (`job_scraper/ats/lever.py`). `GET https://api.lever.co/v0/postings/{company}?mode=json`.
-      Returns `text` (title), `descriptionPlain`, `categories`, `location`, `hostedUrl`. Follow
-      the `greenhouse.py` pattern: pure function `fetch_lever(company_slug, company_name) -> list[JobPosting]`,
-      no DB/filtering logic. Add a `scrape_lever_task()` to the DAG and a `lever` row type to
-      `config/companies.csv` (already has a spare `ats_type` column for this).
-- [ ] **Ashby scraper** (`job_scraper/ats/ashby.py`). `GET https://api.ashbyhq.com/posting-api/job-board/{company}?includeCompensation=true`.
-      Returns `title`, `location`, `descriptionPlain`, `publishedAt`, `jobUrl`. Same pattern as above.
-- [ ] **Workday scraper** (`job_scraper/ats/workday.py`). More involved than the others:
-      `POST https://{company}.wdN.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs` with JSON body
-      `{appliedFacets, limit, offset, searchText}`, offset-paginated (`wdN` subdomain varies per
-      tenant — wd1/wd3/wd5 — verify per company). The list endpoint only gives `title`, `location`,
-      `externalPath`; need a second `GET /wday/cxs/{tenant}/{site}/job/{externalPath}` per posting
-      for the full description. Consider a small thread pool for the per-job fetches given the
-      2-call-per-posting pattern.
+- [x] **Lever scraper** (`job_scraper/ats/lever.py`). `fetch_lever(company_slug, company_name) ->
+      list[JobPosting]`, pure function following the `greenhouse.py` pattern. Wired into
+      `job_scraper/pipeline.py` (`_fetch_ats_postings` shared by all three ATS sources) and a
+      `scrape_lever_task()` in the DAG; `lever` is a supported `ats_type` in
+      `config/companies.csv` (Deep Genomics, verified 2026-09-01, 3 jobs). Unit tests in
+      `tests/ats/test_lever.py`. Manually verified: `run_source('lever', ...)` landed 3 real
+      postings in `data/jobs.db`. See `.scratch/todo-backlog-2026-09/issues/04-lever-ashby-scrapers.md`.
+- [x] **Ashby scraper** (`job_scraper/ats/ashby.py`). Same pattern as Lever above. `scripts/verify_companies.py`
+      generalized to dispatch by `ats_type` for both new sources. `config/companies.csv` gained
+      Benchling and Insitro (both ashby, verified 2026-09-01, 49 + 16 jobs — the same two
+      companies dropped from the seed list earlier for lacking Ashby support, see "Data
+      quality / seed list" below). Unit tests in `tests/ats/test_ashby.py`. Manually verified:
+      `run_source('ashby', ...)` landed 65 real postings in `data/jobs.db` (11 `is_relevant=1`).
+- [x] **Workday scraper** (`job_scraper/ats/workday.py`). `POST .../wday/cxs/{tenant}/{site}/jobs`
+      with `{appliedFacets, limit, offset, searchText}`, offset-paginated (`wdN` subdomain and
+      `site` slug verified per company — `config/companies.csv` gained `site`/`wd_subdomain`
+      columns); the URL's `{company}` subdomain segment reuses the `{tenant}` slug, so no
+      separate field was needed for it. Detail description fetched per posting via a small
+      thread pool (`GET {cxs_base}{externalPath}`) given the 2-call-per-posting pattern.
+      Pagination stops on a short page rather than trusting the response's `total`, since
+      some tenants (Illumina) only report an accurate `total` on the first page. Wired into
+      `job_scraper/pipeline.py` (own `_fetch_workday_postings`, doesn't fit the shared
+      `_fetch_ats_postings` 2-arg shape) and a `scrape_workday_task()` in the DAG; `workday`
+      is a supported `ats_type` in `config/companies.csv` (Illumina, verified 2026-09-01, 154
+      jobs). Unit tests in `tests/ats/test_workday.py`. Manually verified: `run_source('workday',
+      ...)` landed 154 real postings in `data/jobs.db` (38 `is_relevant=1`). See
+      `.scratch/todo-backlog-2026-09/issues/05-workday-scraper.md`.
 
 ## Niche bio job boards
 
@@ -85,28 +120,40 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
 
 ## Data quality / seed list
 
-- [ ] **Fix unverified companies in `config/companies.csv`** — Benchling, Insitro, and Vir
-      Biotechnology are flagged `UNVERIFIED` (guessed Greenhouse board tokens return 404).
-      Check their actual careers page to find the real ATS (may not be Greenhouse at all) and
-      correct the row, or drop it. Re-run `python scripts/verify_companies.py` after.
+- [x] **Fix unverified companies in `config/companies.csv`.** Benchling and Insitro are on
+      Ashby, which this repo doesn't support yet (see "New ATS sources" below) — dropped. Vir
+      Biotechnology's real Greenhouse token is `virbiotechnologyinc`, not the guessed `vir` —
+      corrected. Verified with `python scripts/verify_companies.py` (16 jobs) and a manual
+      `run_source('greenhouse', ...)` run that persisted 16 real Vir postings to the DB.
 - [ ] **Expand the seed list** as you find more target companies — add rows to `companies.csv`
-      with `ats_type=greenhouse` (or `lever`/`ashby`/`workday` once those scrapers exist).
+      with `ats_type=greenhouse`, `lever`, `ashby`, or `workday`.
 
 ## Filtering quality
 
-- [ ] **Reduce boilerplate false positives in keyword filtering.** Substring matching against
+- [x] **Reduce boilerplate false positives in keyword filtering.** Substring matching against
       full job descriptions catches a company's "About Us" blurb, not just role-specific text —
       e.g. a Sales or Finance posting at 10x Genomics matches because the company description
       mentions "genomics"/"NGS". A word-boundary bug (bare acronyms like `NGS`/`STAR` matching
       inside unrelated words like "savings"/"Started") was already fixed in `job_scraper/config.py`
-      during MVP verification, but boilerplate matching remains noisy. Options to try: weight
-      title matches above description matches, strip a known "About [Company]" preamble before
-      matching, or only fall back to description matching when the title doesn't clearly
-      indicate role type.
-- [ ] **Tune `config/keywords.yaml` based on real results** — after a few days of real DAG runs,
-      review `SELECT * FROM job_postings WHERE is_relevant=1` for false positives/negatives and
-      adjust `include`/`exclude`. Run `python -m job_scraper.filtering.backfill` after changes to
-      reclassify existing rows.
+      during MVP verification, but boilerplate matching remained noisy. Fixed by scoping: an
+      `include` match in the title returns relevant immediately; otherwise a new
+      `off_topic_titles` list in `config/keywords.yaml` (Sales, Marketing, Business Development,
+      Investor Relations, Communications Manager, Recruiter, Talent Acquisition, Human Resources,
+      Mechanical Engineer) skips the description fallback, so boilerplate text can't make a
+      clearly non-bioinformatics posting relevant — confirmed against the live DB: 10x Genomics'
+      "Channel Sales Account Executive", "District Sales Manager", "Regional Marketing Manager",
+      and Generate Biomedicines' "Head of Investor Relations" / "...Communications Manager" all
+      dropped out of `is_relevant=1`. See `job_scraper/filtering/keyword_filter.py` and
+      `tests/filtering/test_keyword_filter.py`.
+- [x] **Tune `config/keywords.yaml` based on real results.** Reviewed `SELECT * FROM
+      job_postings WHERE is_relevant=1`/`=0` against the live DB (751 rows, 7 real DAG runs).
+      Found two include-pattern false negatives, not just false positives: `bioinformatics`
+      didn't match "Bioinformatician"/"Bioinformaticist" titles (63 rows misclassified), and
+      `computational biolog(?:y|ist)` didn't match the plural "computational biologists" —
+      both broadened (`bioinformatic(?:s|ian|ist)`, `computational biolog(?:y|ists?)`). Ran
+      `python -m job_scraper.filtering.backfill` against `data/jobs.db` afterward — 751 rows
+      recomputed, `is_relevant=1` went from 396 to 457 (net gain from the bioinformatician fix
+      outweighing the boilerplate removals).
 
 ## Cross-source dedup
 
@@ -136,17 +183,18 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
 
 ## Container image
 
-- [ ] **The Airflow image installs the whole `pyproject.toml`.** `pip install -e /opt/airflow`
-      pulls `marimo`, `catboost` and `ipython` into the worker — they exist for the
-      `thinking_space/` notebook and are never imported by `job_scraper`. `torch` and
-      `sentence-transformers` are genuinely needed, so the image stays large regardless
-      (3.43GB today), but it is carrying a notebook stack on top of that. Split the deps into
-      optional groups (`[project.optional-dependencies]`) and have the Dockerfile install only
-      the scoring set.
-- [ ] **Two dependency manifests.** The Dockerfile installs `requirements.txt` and then
-      `pyproject.toml`; the former lists six packages that the latter also declares. Nothing
-      keeps them in step, and it is not obvious which one a new dependency belongs in. Fold
-      `requirements.txt` into `pyproject.toml` and drop it.
+- [x] **The Airflow image installs the whole `pyproject.toml`.** Notebook-only packages
+      (`marimo`, `catboost`, `ipython`, `nltk`, `seaborn` — none imported by `job_scraper`,
+      only by `thinking_space/score_jd/score.py`) moved to a `[project.optional-dependencies]`
+      `notebook` extra. The Dockerfile's `pip install -e /opt/airflow` installs only the core
+      `[project.dependencies]` set (`torch`/`sentence-transformers` stay there — the scoring
+      stage genuinely needs them, so the image doesn't shrink, but it no longer also carries
+      a notebook stack). Local dev installs the extra explicitly: `uv pip install -e
+      ".[notebook]"`. `seaborn` was previously used by the notebook but missing from any
+      manifest entirely (silently satisfied by whatever was already in the venv) — now
+      declared.
+- [x] **Two dependency manifests.** `requirements.txt` dropped; the Dockerfile now installs
+      only from `pyproject.toml` (core deps, no `[notebook]` extra).
 
 ## Scoring notebook (`thinking_space/score_jd/score.py`)
 

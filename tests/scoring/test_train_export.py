@@ -1,3 +1,4 @@
+import json
 import warnings
 from pathlib import Path
 from types import SimpleNamespace
@@ -299,10 +300,19 @@ def _fake_feature_matrix(descriptions, _cfg=None):
     )
 
 
+_FAKE_FINGERPRINT = {
+    "embedding_model": "fake-model",
+    "embedding_model_revision": None,
+    "weights_commit_hash": "fakeweights",
+    "modeling_code_revision": "fakemodelingcode",
+}
+
+
 @pytest.fixture
 def exportable(jd_dir, config_dir):
     """Everything train_export() needs to run without a sentence-transformer: a JD set
-    large enough for the 5-fold CV inside _tune(), and build_features() stubbed out."""
+    large enough for the 5-fold CV inside _tune(), and build_features()/the embedding
+    model load stubbed out."""
     _write_hand_scored_jds(
         [
             (f"2026-02-{i + 1:02d}_Company", str(30 + i * 5), f"Role {i}")
@@ -310,11 +320,26 @@ def exportable(jd_dir, config_dir):
         ],
         jd_dir,
     )
-    with patch(
-        "job_scraper.scoring.train_export.build_features",
-        side_effect=_fake_feature_matrix,
-    ) as stub:
-        yield SimpleNamespace(config_dir=config_dir, build_features=stub)
+    with (
+        patch(
+            "job_scraper.scoring.train_export.build_features",
+            side_effect=_fake_feature_matrix,
+        ) as build_features_stub,
+        patch(
+            "job_scraper.scoring.train_export.load_embedding_model",
+            return_value=object(),
+        ) as load_model_stub,
+        patch(
+            "job_scraper.scoring.train_export.model_fingerprint",
+            return_value=_FAKE_FINGERPRINT,
+        ) as fingerprint_stub,
+    ):
+        yield SimpleNamespace(
+            config_dir=config_dir,
+            build_features=build_features_stub,
+            load_model=load_model_stub,
+            model_fingerprint=fingerprint_stub,
+        )
 
 
 @pytest.mark.parametrize("regressor", ["ridge", "elasticnet", "nusvr"])
@@ -342,6 +367,23 @@ def test_creates_missing_artifact_directories(exportable):
     assert cfg.scaler_path.is_file()
 
 
+def test_writes_fingerprint_alongside_artifacts(exportable):
+    cfg = load_scoring_config(exportable.config_dir)
+
+    train_export.train_export(exportable.config_dir, "ridge", n_trials=1)
+
+    assert json.loads(cfg.fingerprint_path.read_text()) == _FAKE_FINGERPRINT
+    exportable.model_fingerprint.assert_called_once()
+
+
+def test_fingerprint_reuses_the_model_build_features_already_loaded(exportable):
+    """The embedding model load train_export needs for the fingerprint must be a cache
+    hit off the one build_features() already triggered, not a second real load."""
+    train_export.train_export(exportable.config_dir, "ridge", n_trials=1)
+
+    exportable.load_model.assert_called_once()
+
+
 def test_returns_the_studys_best_value(exportable):
     study = SimpleNamespace(best_params={"alpha": 0.5}, best_value=0.4242)
 
@@ -358,7 +400,9 @@ def test_leaves_the_repos_own_artifacts_untouched(exportable):
 
     cfg = load_scoring_config(exportable.config_dir)
     assert cfg.regressor_path.parent != REPO_SCORING_DIR
+    assert cfg.fingerprint_path.parent != REPO_SCORING_DIR
     assert {p: p.stat().st_mtime_ns for p in REPO_SCORING_DIR.glob("*.joblib")} == before
+    assert not (REPO_SCORING_DIR / "fingerprint.json").exists()
 
 
 def test_regressor_is_fitted_on_scaled_features(exportable):

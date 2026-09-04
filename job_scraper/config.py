@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -35,6 +35,11 @@ class CompanyEntry:
     tenant: str | None
     careers_url: str
     notes: str
+    # Workday-only: the CXS career site slug (e.g. "illumina-careers") and the wdN
+    # subdomain (e.g. "wd1") -- both vary per tenant, so they're stored alongside
+    # tenant rather than derived.
+    site: str | None = None
+    wd_subdomain: str | None = None
 
 
 @dataclass
@@ -42,6 +47,10 @@ class KeywordConfig:
     include_patterns: list[re.Pattern]
     exclude_patterns: list[re.Pattern]
     match_fields: list[str]
+    # Title phrases that mark a posting as a non-bioinformatics role (sales, marketing,
+    # etc). Used to skip the description fallback so a company's "About Us" boilerplate
+    # (e.g. "...expertise in NGS...") doesn't count a Sales/Marketing posting as relevant.
+    off_topic_title_patterns: list[re.Pattern] = field(default_factory=list)
 
 
 @dataclass
@@ -52,6 +61,7 @@ class ScoringConfig:
     reference_cache_path: Path
     regressor_path: Path
     scaler_path: Path
+    fingerprint_path: Path
     jd_scores_csv: Path | None
     jd_dir: Path | None = None
     embedding_model_revision: str | None = None
@@ -70,6 +80,8 @@ def load_companies(config_dir: Path | str) -> list[CompanyEntry]:
                 tenant=row["tenant"] or None,
                 careers_url=row["careers_url"],
                 notes=row["notes"],
+                site=row.get("site") or None,
+                wd_subdomain=row.get("wd_subdomain") or None,
             )
             for row in reader
         ]
@@ -81,16 +93,23 @@ def load_keywords(config_dir: Path | str) -> KeywordConfig:
         raw = yaml.safe_load(f)
 
     flags = 0 if raw.get("case_sensitive", False) else re.IGNORECASE
-    # Require word boundaries around each pattern so short acronyms (e.g. "NGS", "STAR")
-    # don't match as a substring inside unrelated words (e.g. "savings", "Started").
-    include_patterns = [re.compile(r"\b(?:" + p + r")\b", flags) for p in raw.get("include", [])]
-    exclude_patterns = [re.compile(r"\b(?:" + p + r")\b", flags) for p in raw.get("exclude", [])]
+
+    def compile_all(key: str) -> list[re.Pattern]:
+        # Require word boundaries around each pattern so short acronyms (e.g. "NGS",
+        # "STAR") don't match as a substring inside unrelated words (e.g. "savings",
+        # "Started").
+        return [re.compile(r"\b(?:" + p + r")\b", flags) for p in raw.get(key, [])]
+
+    include_patterns = compile_all("include")
+    exclude_patterns = compile_all("exclude")
+    off_topic_title_patterns = compile_all("off_topic_titles")
     match_fields = raw.get("match_fields", ["title", "description"])
 
     return KeywordConfig(
         include_patterns=include_patterns,
         exclude_patterns=exclude_patterns,
         match_fields=match_fields,
+        off_topic_title_patterns=off_topic_title_patterns,
     )
 
 
@@ -122,6 +141,11 @@ def load_scoring_config(config_dir: Path | str) -> ScoringConfig:
         reference_cache_path=repo_root / raw["reference_cache_path"],
         regressor_path=repo_root / raw["regressor_path"],
         scaler_path=repo_root / raw["scaler_path"],
+        # Where train_export.py records the embedding setup the regressor/scaler were
+        # fitted on, so scoring can refuse to run against a setup that has since
+        # changed. Not required in scoring.yaml (defaults alongside the artifacts) so
+        # existing configs don't need editing to pick this up.
+        fingerprint_path=repo_root / raw.get("fingerprint_path", "config/scoring/fingerprint.json"),
         jd_scores_csv=_expand_path(jd_scores_csv) if jd_scores_csv else None,
         # The directory holding one <name>/jd.md per scored row. Its own var rather
         # than the CSV's parent: the two need not sit together, and deriving one from

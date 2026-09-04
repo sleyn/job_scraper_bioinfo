@@ -44,8 +44,10 @@ them later without rework.
    ```
    uv venv --python 3.12 .venv
    source .venv/bin/activate
-   uv pip install -r requirements.txt -e .
+   uv pip install -e ".[notebook]"
    ```
+   Drop `[notebook]` if you don't need `thinking_space/score_jd/score.py` — it pulls in
+   marimo, catboost, and a few other notebook-only packages the Airflow image never installs.
 5. Run the test suite: `python -m pytest tests/`
 6. Verify the seed company list against the live Greenhouse API:
    `python scripts/verify_companies.py` — fix or drop any rows that fail (see

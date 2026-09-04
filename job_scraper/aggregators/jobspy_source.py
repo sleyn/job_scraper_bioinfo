@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 import pandas as pd
 from jobspy import scrape_jobs
+from jobspy.linkedin import LinkedIn
+from jobspy.model import ScraperInput, Site
 
 from job_scraper.models import JobPosting
 
@@ -68,6 +71,9 @@ def fetch_jobspy(
                 location=location,
                 results_wanted=results_wanted,
                 hours_old=hours_old,
+                # No-op for non-LinkedIn sites; JobSpy only makes the extra
+                # per-posting description request when "linkedin" is in site_name.
+                linkedin_fetch_description=True,
             )
             if df is None or df.empty:
                 continue
@@ -76,3 +82,18 @@ def fetch_jobspy(
                     continue
                 postings.append(_row_to_posting(row))
     return postings
+
+
+def fetch_linkedin_description(job_url: str) -> str | None:
+    """Re-fetches a single LinkedIn posting's description by job id, for backfilling rows
+    that were stored before description fetching was enabled (see
+    aggregators/backfill_linkedin_descriptions.py). This is the same per-job request
+    `scrape_jobs(..., linkedin_fetch_description=True)` makes internally, but jobspy has no
+    public API to fetch one job's description in isolation — so this reaches into
+    jobspy.linkedin.LinkedIn's private `_get_job_details`, keyed by the job id in the URL
+    (`.../jobs/view/{job_id}`)."""
+    job_id = urlparse(job_url).path.rstrip("/").rsplit("/", 1)[-1]
+    scraper = LinkedIn()
+    scraper.scraper_input = ScraperInput(site_type=[Site.LINKEDIN])
+    details = scraper._get_job_details(job_id)
+    return details.get("description")
