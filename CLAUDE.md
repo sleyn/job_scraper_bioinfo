@@ -106,8 +106,9 @@ tests/                       mirrors job_scraper/ layout; mocked HTTP for ats/, 
                              (tmp_path fixture) for db/
 docker-compose.yaml           local Airflow stack: postgres (Airflow's own metadata DB, separate
                              from data/jobs.db), airflow-init, airflow-webserver, airflow-scheduler
-Dockerfile                   extends apache/airflow, installs requirements.txt + editable
-                             job_scraper package
+Dockerfile                   extends apache/airflow, installs editable job_scraper package
+                             from pyproject.toml's core deps (no `[notebook]` extra — that's
+                             thinking_space-only and never imported by job_scraper)
 .env.example                  AIRFLOW_UID, AIRFLOW_FERNET_KEY — copy to .env before docker compose up
 data/jobs.db                  the actual SQLite output, gitignored — query directly, see README.md
 ```

@@ -183,17 +183,18 @@ see `CONTEXT.md` for the Score/Hand-scored JD/Targeting Screen domain model — 
 
 ## Container image
 
-- [ ] **The Airflow image installs the whole `pyproject.toml`.** `pip install -e /opt/airflow`
-      pulls `marimo`, `catboost` and `ipython` into the worker — they exist for the
-      `thinking_space/` notebook and are never imported by `job_scraper`. `torch` and
-      `sentence-transformers` are genuinely needed, so the image stays large regardless
-      (3.43GB today), but it is carrying a notebook stack on top of that. Split the deps into
-      optional groups (`[project.optional-dependencies]`) and have the Dockerfile install only
-      the scoring set.
-- [ ] **Two dependency manifests.** The Dockerfile installs `requirements.txt` and then
-      `pyproject.toml`; the former lists six packages that the latter also declares. Nothing
-      keeps them in step, and it is not obvious which one a new dependency belongs in. Fold
-      `requirements.txt` into `pyproject.toml` and drop it.
+- [x] **The Airflow image installs the whole `pyproject.toml`.** Notebook-only packages
+      (`marimo`, `catboost`, `ipython`, `nltk`, `seaborn` — none imported by `job_scraper`,
+      only by `thinking_space/score_jd/score.py`) moved to a `[project.optional-dependencies]`
+      `notebook` extra. The Dockerfile's `pip install -e /opt/airflow` installs only the core
+      `[project.dependencies]` set (`torch`/`sentence-transformers` stay there — the scoring
+      stage genuinely needs them, so the image doesn't shrink, but it no longer also carries
+      a notebook stack). Local dev installs the extra explicitly: `uv pip install -e
+      ".[notebook]"`. `seaborn` was previously used by the notebook but missing from any
+      manifest entirely (silently satisfied by whatever was already in the venv) — now
+      declared.
+- [x] **Two dependency manifests.** `requirements.txt` dropped; the Dockerfile now installs
+      only from `pyproject.toml` (core deps, no `[notebook]` extra).
 
 ## Scoring notebook (`thinking_space/score_jd/score.py`)
 
