@@ -83,6 +83,81 @@ def upsert_postings(
     )
 
 
+@dataclass
+class PostingSummary:
+    id: int
+    title: str
+    company: str
+    score: float | None
+    posted_date: str | None
+    url: str
+
+
+def get_relevant_postings(db_path: str) -> list[PostingSummary]:
+    """Relevant postings for the triage list, best fit first.
+
+    SQLite sorts NULL below every other value, so `ORDER BY score DESC` already puts
+    not-yet-scored postings (score IS NULL) last rather than first, which is what the
+    triage list should show without any extra CASE-WHEN handling."""
+    conn = get_connection(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT id, title, company, score, posted_date, url FROM job_postings "
+            "WHERE is_relevant = 1 ORDER BY score DESC"
+        ).fetchall()
+        return [
+            PostingSummary(
+                id=row["id"],
+                title=row["title"],
+                company=row["company"],
+                score=row["score"],
+                posted_date=row["posted_date"],
+                url=row["url"],
+            )
+            for row in rows
+        ]
+    finally:
+        conn.close()
+
+
+@dataclass
+class PostingDetail:
+    id: int
+    title: str
+    company: str
+    source: str
+    description: str
+    score: float | None
+    posted_date: str | None
+    url: str
+
+
+def get_posting_detail(db_path: str, posting_id: int) -> PostingDetail | None:
+    """Full detail for one posting, for the triage detail panel. Returns None if
+    posting_id doesn't exist."""
+    conn = get_connection(db_path)
+    try:
+        row = conn.execute(
+            "SELECT id, title, company, source, description, score, posted_date, url "
+            "FROM job_postings WHERE id = ?",
+            (posting_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return PostingDetail(
+            id=row["id"],
+            title=row["title"],
+            company=row["company"],
+            source=row["source"],
+            description=row["description"],
+            score=row["score"],
+            posted_date=row["posted_date"],
+            url=row["url"],
+        )
+    finally:
+        conn.close()
+
+
 def get_postings_missing_score(db_path: str) -> dict[str, str]:
     """Returns {url: description} for relevant postings that haven't been scored yet.
 

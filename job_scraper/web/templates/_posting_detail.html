@@ -1,0 +1,9 @@
+<h2>{{ posting.title }}</h2>
+<div class="detail-meta">
+    <span class="company">{{ posting.company }}</span>
+    <span class="source">{{ posting.source }}</span>
+    <span class="score">{{ "%.1f"|format(posting.score) if posting.score is not none else "—" }}</span>
+    <span class="posted-date">{{ posting.posted_date or "—" }}</span>
+</div>
+<a class="apply-link" href="{{ posting.url }}" target="_blank" rel="noopener noreferrer">Open original posting</a>
+<div class="description">{{ posting.description }}</div>
