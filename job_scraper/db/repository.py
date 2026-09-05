@@ -91,10 +91,11 @@ class PostingSummary:
     score: float | None
     posted_date: str | None
     url: str
+    application_status: str
 
 
 def get_relevant_postings(db_path: str) -> list[PostingSummary]:
-    """Relevant postings for the triage list, best fit first.
+    """Relevant, non-skipped postings for the triage list, best fit first.
 
     SQLite sorts NULL below every other value, so `ORDER BY score DESC` already puts
     not-yet-scored postings (score IS NULL) last rather than first, which is what the
@@ -102,8 +103,9 @@ def get_relevant_postings(db_path: str) -> list[PostingSummary]:
     conn = get_connection(db_path)
     try:
         rows = conn.execute(
-            "SELECT id, title, company, score, posted_date, url FROM job_postings "
-            "WHERE is_relevant = 1 ORDER BY score DESC"
+            "SELECT id, title, company, score, posted_date, url, application_status "
+            "FROM job_postings "
+            "WHERE is_relevant = 1 AND application_status != 'skip' ORDER BY score DESC"
         ).fetchall()
         return [
             PostingSummary(
@@ -113,6 +115,7 @@ def get_relevant_postings(db_path: str) -> list[PostingSummary]:
                 score=row["score"],
                 posted_date=row["posted_date"],
                 url=row["url"],
+                application_status=row["application_status"],
             )
             for row in rows
         ]
@@ -130,6 +133,7 @@ class PostingDetail:
     score: float | None
     posted_date: str | None
     url: str
+    application_status: str
 
 
 def get_posting_detail(db_path: str, posting_id: int) -> PostingDetail | None:
@@ -138,8 +142,8 @@ def get_posting_detail(db_path: str, posting_id: int) -> PostingDetail | None:
     conn = get_connection(db_path)
     try:
         row = conn.execute(
-            "SELECT id, title, company, source, description, score, posted_date, url "
-            "FROM job_postings WHERE id = ?",
+            "SELECT id, title, company, source, description, score, posted_date, url, "
+            "application_status FROM job_postings WHERE id = ?",
             (posting_id,),
         ).fetchone()
         if row is None:
@@ -153,7 +157,24 @@ def get_posting_detail(db_path: str, posting_id: int) -> PostingDetail | None:
             score=row["score"],
             posted_date=row["posted_date"],
             url=row["url"],
+            application_status=row["application_status"],
         )
+    finally:
+        conn.close()
+
+
+def update_application_status(db_path: str, url: str, status: str) -> None:
+    """Sets a posting's application_status and stamps application_status_updated_at to
+    now, keyed by URL — the same key upsert_postings dedupes on."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_connection(db_path)
+    try:
+        conn.execute(
+            "UPDATE job_postings SET application_status = :status, "
+            "application_status_updated_at = :now WHERE url = :url",
+            {"status": status, "now": now, "url": url},
+        )
+        conn.commit()
     finally:
         conn.close()
 

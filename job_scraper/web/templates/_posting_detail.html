@@ -5,5 +5,15 @@
     <span class="score">{{ "%.1f"|format(posting.score) if posting.score is not none else "—" }}</span>
     <span class="posted-date">{{ posting.posted_date or "—" }}</span>
 </div>
+<div class="status-toggle">
+    {% for value, label in [("new", "New"), ("applied", "Applied"), ("skip", "Skip")] %}
+    <button type="button"
+            class="status-btn{% if posting.application_status == value %} active{% endif %}"
+            hx-post="/postings/{{ posting.id }}/status{% if value == 'skip' and next_id is not none %}?next_id={{ next_id }}{% endif %}"
+            hx-vals='{"status": "{{ value }}"}'
+            hx-target="#detail-panel"
+            hx-swap="innerHTML">{{ label }}</button>
+    {% endfor %}
+</div>
 <a class="apply-link" href="{{ posting.url }}" target="_blank" rel="noopener noreferrer">Open original posting</a>
 <div class="description">{{ posting.description }}</div>

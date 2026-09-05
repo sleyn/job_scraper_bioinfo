@@ -5,6 +5,8 @@ import pytest
 from job_scraper.db.repository import (
     get_linkedin_urls_missing_description,
     get_postings_missing_score,
+    get_relevant_postings,
+    update_application_status,
     update_descriptions,
     update_scores,
     upsert_postings,
@@ -174,6 +176,76 @@ def test_get_linkedin_urls_missing_description_only_matches_relevant_empty_linke
     urls = get_linkedin_urls_missing_description(db_path)
 
     assert urls == ["https://linkedin.com/jobs/view/1"]
+
+
+def test_get_relevant_postings_orders_by_score_desc_and_excludes_irrelevant(db_path):
+    high = _posting("https://example.com/high", title="Senior Bioinformatics Scientist")
+    low = _posting("https://example.com/low", title="Bioinformatics Scientist")
+    unscored = _posting("https://example.com/unscored", title="Computational Biologist")
+    irrelevant = _posting("https://example.com/irrelevant", title="Sales Development Rep")
+    upsert_postings(
+        db_path,
+        [high, low, unscored, irrelevant],
+        {high.url: True, low.url: True, unscored.url: True, irrelevant.url: False},
+    )
+    update_scores(db_path, {high.url: 90.0, low.url: 40.0})
+
+    postings = get_relevant_postings(db_path)
+
+    assert [p.url for p in postings] == [high.url, low.url, unscored.url]
+    assert postings[0].score == pytest.approx(90.0)
+    assert postings[-1].score is None
+
+
+def test_get_relevant_postings_excludes_skipped(db_path):
+    kept = _posting("https://example.com/kept")
+    skipped = _posting("https://example.com/skipped", title="Computational Biologist")
+    upsert_postings(db_path, [kept, skipped], {kept.url: True, skipped.url: True})
+    update_application_status(db_path, skipped.url, "skip")
+
+    postings = get_relevant_postings(db_path)
+
+    assert [p.url for p in postings] == [kept.url]
+
+
+def test_new_postings_default_to_new_application_status(db_path):
+    posting = _posting("https://example.com/new")
+    upsert_postings(db_path, [posting], {posting.url: True})
+
+    [summary] = get_relevant_postings(db_path)
+
+    assert summary.application_status == "new"
+
+
+def test_update_application_status_sets_status_and_timestamp(db_path):
+    posting = _posting("https://example.com/applied")
+    upsert_postings(db_path, [posting], {posting.url: True})
+
+    update_application_status(db_path, posting.url, "applied")
+
+    conn = get_connection(db_path)
+    row = conn.execute(
+        "SELECT application_status, application_status_updated_at FROM job_postings WHERE url = ?",
+        (posting.url,),
+    ).fetchone()
+    conn.close()
+    assert row["application_status"] == "applied"
+    assert row["application_status_updated_at"] is not None
+
+
+def test_upsert_does_not_overwrite_existing_application_status(db_path):
+    posting = _posting("https://example.com/rescraped")
+    upsert_postings(db_path, [posting], {posting.url: True})
+    update_application_status(db_path, posting.url, "applied")
+
+    upsert_postings(db_path, [posting], {posting.url: True})
+
+    conn = get_connection(db_path)
+    row = conn.execute(
+        "SELECT application_status FROM job_postings WHERE url = ?", (posting.url,)
+    ).fetchone()
+    conn.close()
+    assert row["application_status"] == "applied"
 
 
 def test_update_descriptions_persists_and_unblocks_scoring(db_path):
