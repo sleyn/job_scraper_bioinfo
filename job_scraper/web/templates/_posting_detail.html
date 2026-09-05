@@ -9,7 +9,7 @@
     {% for value, label in [("new", "New"), ("applied", "Applied"), ("skip", "Skip")] %}
     <button type="button"
             class="status-btn{% if posting.application_status == value %} active{% endif %}"
-            hx-post="/postings/{{ posting.id }}/status{% if value == 'skip' and next_id is not none %}?next_id={{ next_id }}{% endif %}"
+            hx-post="{{ status_url('/postings/' ~ posting.id ~ '/status', next_id if value == 'skip' else none) }}"
             hx-vals='{"status": "{{ value }}"}'
             hx-target="#detail-panel"
             hx-swap="innerHTML">{{ label }}</button>

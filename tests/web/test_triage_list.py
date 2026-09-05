@@ -57,7 +57,7 @@ def test_lists_only_relevant_postings_ordered_by_score_desc(db_path, client):
     body = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "Gamma" not in body
+    assert "Sales Development Rep" not in body
     assert body.index("Senior Bioinformatics Scientist") < body.index("Bioinformatics Scientist")
     assert "Acme" in body
     assert "Beta" in body

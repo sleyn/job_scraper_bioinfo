@@ -57,6 +57,43 @@
             color: #777;
             margin-top: 3rem;
         }
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+            align-items: flex-end;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #ddd;
+        }
+        .filters label {
+            display: flex;
+            flex-direction: column;
+            font-size: 0.75rem;
+            color: #555;
+            gap: 0.2rem;
+        }
+        .filters select[multiple] {
+            min-width: 8rem;
+            height: 4.5rem;
+        }
+        .filters input[type="number"] {
+            width: 5rem;
+        }
+        .filters .checkbox-label {
+            flex-direction: row;
+            align-items: center;
+            gap: 0.35rem;
+        }
+        .filters button {
+            padding: 0.4rem 0.9rem;
+            border-radius: 6px;
+            border: 1px solid #333;
+            background: #333;
+            color: white;
+            cursor: pointer;
+            height: fit-content;
+        }
         .badge {
             display: inline-block;
             padding: 0.1rem 0.5rem;
@@ -113,10 +150,49 @@
 <body>
     <div class="layout">
         <div class="list">
+            <form class="filters" method="get" action="/">
+                <label>Company
+                    <select name="company" multiple>
+                        {% for company in filter_options.companies %}
+                        <option value="{{ company }}" {% if company in (filters.companies or []) %}selected{% endif %}>{{ company }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>Source
+                    <select name="source" multiple>
+                        {% for source in filter_options.sources %}
+                        <option value="{{ source }}" {% if source in (filters.sources or []) %}selected{% endif %}>{{ source }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>Status
+                    <select name="status">
+                        <option value="" {% if not filters.status %}selected{% endif %}>Default</option>
+                        <option value="new" {% if filters.status == "new" %}selected{% endif %}>New</option>
+                        <option value="applied" {% if filters.status == "applied" %}selected{% endif %}>Applied</option>
+                        <option value="skip" {% if filters.status == "skip" %}selected{% endif %}>Skip</option>
+                        <option value="all" {% if filters.status == "all" %}selected{% endif %}>All</option>
+                    </select>
+                </label>
+                <label>Min score
+                    <input type="number" name="min_score" step="0.1" value="{{ filters.min_score if filters.min_score is not none else '' }}">
+                </label>
+                <label>Max score
+                    <input type="number" name="max_score" step="0.1" value="{{ filters.max_score if filters.max_score is not none else '' }}">
+                </label>
+                <label>Title search
+                    <input type="text" name="q" value="{{ filters.keyword or '' }}">
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" name="show_all" value="1" {% if filters.include_all %}checked{% endif %}>
+                    Show all (ignore relevance)
+                </label>
+                <button type="submit">Apply filters</button>
+            </form>
             {% if postings %}
                 {% for posting in postings %}
                 <div class="card" id="card-{{ posting.id }}"
-                     hx-get="/postings/{{ posting.id }}/detail{% if loop.nextitem %}?next_id={{ loop.nextitem.id }}{% endif %}"
+                     hx-get="{{ detail_url('/postings/' ~ posting.id ~ '/detail', loop.nextitem.id if loop.nextitem else none) }}"
                      hx-target="#detail-panel"
                      hx-swap="innerHTML">
                     <h2>{{ posting.title }}</h2>
@@ -129,7 +205,11 @@
                 </div>
                 {% endfor %}
             {% else %}
+                {% if filters_active %}
+                <p class="empty">No postings match these filters.</p>
+                {% else %}
                 <p class="empty">No relevant postings yet.</p>
+                {% endif %}
             {% endif %}
         </div>
         <div id="detail-panel">

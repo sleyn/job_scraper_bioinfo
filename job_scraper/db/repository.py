@@ -94,18 +94,79 @@ class PostingSummary:
     application_status: str
 
 
-def get_relevant_postings(db_path: str) -> list[PostingSummary]:
-    """Relevant, non-skipped postings for the triage list, best fit first.
+def _add_in_clause(
+    clauses: list[str], params: dict, column: str, values: list[str] | None
+) -> None:
+    """Appends `column IN (...)` to `clauses` and its params to `params`, uniquely
+    prefixed per column so multiple calls (company, source) can't collide."""
+    if not values:
+        return
+    placeholders = ", ".join(f":{column}_{i}" for i in range(len(values)))
+    clauses.append(f"{column} IN ({placeholders})")
+    params.update({f"{column}_{i}": v for i, v in enumerate(values)})
+
+
+def get_relevant_postings(
+    db_path: str,
+    *,
+    include_all: bool = False,
+    status: str | None = None,
+    companies: list[str] | None = None,
+    sources: list[str] | None = None,
+    min_score: float | None = None,
+    max_score: float | None = None,
+    keyword: str | None = None,
+) -> list[PostingSummary]:
+    """Triage list postings, best fit first, per the triage filter set.
+
+    Defaults match the plain triage view: `is_relevant = 1` and `application_status !=
+    'skip'`. `include_all=True` drops the relevance filter. `status` narrows to one exact
+    status (`new`/`applied`/`skip`) or, as `"all"`, drops the status filter entirely
+    (including `skip`); left `None` it keeps the skip-excluding default. `companies` and
+    `sources` are exact-match allowlists (`IN`); `min_score`/`max_score` bound `score`
+    inclusively — since SQLite comparisons against NULL are false, either bound already
+    excludes not-yet-scored postings. `keyword` is a case-insensitive substring match on
+    `title`.
 
     SQLite sorts NULL below every other value, so `ORDER BY score DESC` already puts
     not-yet-scored postings (score IS NULL) last rather than first, which is what the
     triage list should show without any extra CASE-WHEN handling."""
+    clauses = []
+    params: dict = {}
+
+    if not include_all:
+        clauses.append("is_relevant = 1")
+
+    if status is None:
+        clauses.append("application_status != 'skip'")
+    elif status != "all":
+        clauses.append("application_status = :status")
+        params["status"] = status
+
+    _add_in_clause(clauses, params, "company", companies)
+    _add_in_clause(clauses, params, "source", sources)
+
+    if min_score is not None:
+        clauses.append("score >= :min_score")
+        params["min_score"] = min_score
+
+    if max_score is not None:
+        clauses.append("score <= :max_score")
+        params["max_score"] = max_score
+
+    if keyword:
+        escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        clauses.append("title LIKE :keyword ESCAPE '\\'")
+        params["keyword"] = f"%{escaped}%"
+
+    where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+
     conn = get_connection(db_path)
     try:
         rows = conn.execute(
             "SELECT id, title, company, score, posted_date, url, application_status "
-            "FROM job_postings "
-            "WHERE is_relevant = 1 AND application_status != 'skip' ORDER BY score DESC"
+            f"FROM job_postings {where_sql} ORDER BY score DESC",
+            params,
         ).fetchall()
         return [
             PostingSummary(
@@ -119,6 +180,28 @@ def get_relevant_postings(db_path: str) -> list[PostingSummary]:
             )
             for row in rows
         ]
+    finally:
+        conn.close()
+
+
+def get_filter_options(db_path: str) -> dict[str, list[str]]:
+    """Distinct company/source values across all postings, for populating the triage
+    filter controls (independent of any filters currently applied)."""
+    conn = get_connection(db_path)
+    try:
+        companies = [
+            row["company"]
+            for row in conn.execute(
+                "SELECT DISTINCT company FROM job_postings ORDER BY company"
+            ).fetchall()
+        ]
+        sources = [
+            row["source"]
+            for row in conn.execute(
+                "SELECT DISTINCT source FROM job_postings ORDER BY source"
+            ).fetchall()
+        ]
+        return {"companies": companies, "sources": sources}
     finally:
         conn.close()
 
