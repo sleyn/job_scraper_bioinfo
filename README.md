@@ -63,6 +63,9 @@ them later without rework.
    find `bioinformatics_job_scrape`, unpause it, and trigger a manual run.
 9. Ongoing use: the DAG runs daily on its own. Query `data/jobs.db` directly anytime — no
    need to open the Airflow UI day-to-day.
+10. Open `http://localhost:5000` for the triage UI — a separate, always-on `web` service
+    (started by the same `docker compose up`) that reads/writes the same `data/jobs.db`
+    Airflow writes to, independent of the Airflow stack's dependency weight.
 
 ## Querying results
 

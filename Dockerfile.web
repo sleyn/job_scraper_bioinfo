@@ -1,0 +1,8 @@
+FROM python:3.12-slim
+
+COPY pyproject.toml /opt/web/pyproject.toml
+COPY job_scraper /opt/web/job_scraper
+RUN pip install --no-cache-dir -e "/opt/web[web]"
+
+WORKDIR /opt/web
+CMD ["python", "-m", "job_scraper.web", "--host", "0.0.0.0"]

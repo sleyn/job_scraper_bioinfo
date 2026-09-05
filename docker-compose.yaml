@@ -91,5 +91,17 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    environment:
+      JOB_SCRAPER_DB_PATH: /opt/web/data/jobs.db
+    volumes:
+      - ./data:/opt/web/data
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+
 volumes:
   postgres-db-volume:
