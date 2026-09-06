@@ -2,6 +2,10 @@ x-airflow-common-env: &airflow-common-env
   AIRFLOW__CORE__EXECUTOR: LocalExecutor
   AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
   AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
+  # Must be identical across webserver/scheduler: the webserver fetches task logs from
+  # the scheduler's log-serving endpoint over HTTP, authenticated with this key. Left
+  # unset, each container generates its own random default and that fetch 403s.
+  AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:?set AIRFLOW_SECRET_KEY in .env}
   AIRFLOW__CORE__LOAD_EXAMPLES: "false"
   AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
   JOB_SCRAPER_CONFIG_DIR: /opt/airflow/config
