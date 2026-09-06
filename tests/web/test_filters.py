@@ -15,12 +15,12 @@ def db_path(tmp_path):
     return path
 
 
-def _posting(url, title, company, source="greenhouse", posted_date=None):
+def _posting(url, title, company, source="greenhouse", posted_date=None, location="Remote"):
     return JobPosting(
         source=source,
         company=company,
         title=title,
-        location="Remote",
+        location=location,
         description="Bioinformatics pipelines.",
         url=url,
         posted_date=posted_date,
@@ -112,6 +112,34 @@ def test_status_filter_narrows_to_one_status(client, seeded):
 
 def test_invalid_status_filter_returns_400(client, seeded):
     response = client.get("/?status=bogus")
+
+    assert response.status_code == 400
+
+
+def test_remote_filter(client, db_path):
+    remote = _posting(
+        "https://example.com/remote", "Remote Bioinformatics Scientist", "Acme",
+        location="Remote",
+    )
+    onsite = _posting(
+        "https://example.com/onsite", "Onsite Bioinformatics Scientist", "Acme",
+        location="Boston, MA",
+    )
+    upsert_postings(db_path, [remote, onsite], {remote.url: True, onsite.url: True})
+
+    remote_response = client.get("/?remote=remote")
+    onsite_response = client.get("/?remote=onsite")
+
+    remote_body = remote_response.get_data(as_text=True)
+    onsite_body = onsite_response.get_data(as_text=True)
+    assert "Remote Bioinformatics Scientist" in remote_body
+    assert "Onsite Bioinformatics Scientist" not in remote_body
+    assert "Onsite Bioinformatics Scientist" in onsite_body
+    assert "Remote Bioinformatics Scientist" not in onsite_body
+
+
+def test_invalid_remote_filter_returns_400(client, seeded):
+    response = client.get("/?remote=bogus")
 
     assert response.status_code == 400
 

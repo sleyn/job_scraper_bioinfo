@@ -19,6 +19,7 @@ from job_scraper.db.schema import init_db
 
 VALID_APPLICATION_STATUSES = {"new", "applied", "skip"}
 VALID_STATUS_FILTERS = {"new", "applied", "skip", "all"}
+VALID_REMOTE_FILTERS = {"remote", "onsite"}
 
 
 def _find_next_id(postings, after_id: int) -> int | None:
@@ -37,6 +38,9 @@ def _filters_from_request(args) -> dict:
     status = args.get("status") or None
     if status is not None and status not in VALID_STATUS_FILTERS:
         abort(400)
+    remote = args.get("remote") or None
+    if remote is not None and remote not in VALID_REMOTE_FILTERS:
+        abort(400)
     return {
         "include_all": args.get("show_all") == "1",
         "status": status,
@@ -45,6 +49,7 @@ def _filters_from_request(args) -> dict:
         "min_score": args.get("min_score", type=float),
         "max_score": args.get("max_score", type=float),
         "keyword": args.get("q") or None,
+        "remote": remote,
     }
 
 
@@ -69,6 +74,8 @@ def _filter_params(filters: dict) -> list[tuple[str, str]]:
         params.append(("max_score", filters["max_score"]))
     if filters["keyword"]:
         params.append(("q", filters["keyword"]))
+    if filters["remote"]:
+        params.append(("remote", filters["remote"]))
     return params
 
 
@@ -97,6 +104,7 @@ def _filters_active(filters: dict) -> bool:
             filters["min_score"] is not None,
             filters["max_score"] is not None,
             filters["keyword"],
+            filters["remote"],
         ]
     )
 

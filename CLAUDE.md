@@ -63,7 +63,8 @@ job_scraper/
                            being a pure per-source fetcher
   db/
     schema.py               CREATE TABLE statements, init_db(), get_connection() (WAL mode, for
-                             safe concurrent writes from parallel Airflow tasks)
+                             safe concurrent writes from parallel Airflow tasks); is_remote is a
+                             nullable tri-state column (NULL unknown / 0 on-site / 1 remote)
     repository.py            upsert_postings() — dedup via url UNIQUE constraint + ON CONFLICT;
                              get_postings_missing_score()/update_scores() — the score stage's read/
                              write seam; the read side gates on is_relevant = 1 AND a non-empty
@@ -75,6 +76,12 @@ job_scraper/
     keyword_filter.py        is_relevant(posting, cfg) -> bool
     backfill.py               CLI (python -m job_scraper.filtering.backfill): recompute
                              is_relevant for existing rows after editing keywords.yaml
+    remote_filter.py           compute_is_remote(posting) -> int | None, tri-state (1 remote /
+                             0 on-site incl. hybrid / None unknown); prefers JobSpy's own
+                             `is_remote` extra, else a word-boundary "remote"/"hybrid" match on
+                             `location`; called from db/repository.py's upsert_postings()
+    backfill_remote.py         CLI (python -m job_scraper.filtering.backfill_remote): recompute
+                             is_remote for existing rows from stored location/extra_json
   ats/
     base.py                   shared requests.Session() w/ User-Agent, reused by future ats/*.py
     greenhouse.py              fetch_greenhouse(board_token, company_name) -> list[JobPosting];

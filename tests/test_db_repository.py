@@ -22,17 +22,21 @@ def db_path(tmp_path):
     return path
 
 
-def _posting(url, title="Bioinformatics Scientist", description="desc", source="greenhouse"):
+def _posting(
+    url, title="Bioinformatics Scientist", description="desc", source="greenhouse",
+    location="Remote", extra=None,
+):
     return JobPosting(
         source=source,
         company="Acme",
         title=title,
-        location="Remote",
+        location=location,
         description=description,
         url=url,
         posted_date=None,
         scraped_at=datetime.now(timezone.utc),
         raw_id="123",
+        extra=extra or {},
     )
 
 
@@ -246,6 +250,57 @@ def test_upsert_does_not_overwrite_existing_application_status(db_path):
     ).fetchone()
     conn.close()
     assert row["application_status"] == "applied"
+
+
+def test_upsert_computes_is_remote_from_location(db_path):
+    remote = _posting("https://example.com/remote", location="Remote - US")
+    onsite = _posting("https://example.com/onsite", location="Boston, MA")
+    unknown = _posting("https://example.com/unknown", location=None)
+    upsert_postings(
+        db_path,
+        [remote, onsite, unknown],
+        {remote.url: True, onsite.url: True, unknown.url: True},
+    )
+
+    conn = get_connection(db_path)
+    rows = {
+        row["url"]: row["is_remote"]
+        for row in conn.execute("SELECT url, is_remote FROM job_postings").fetchall()
+    }
+    conn.close()
+    assert rows[remote.url] == 1
+    assert rows[onsite.url] == 0
+    assert rows[unknown.url] is None
+
+
+def test_upsert_prefers_jobspy_is_remote_extra_over_location_text(db_path):
+    posting = _posting(
+        "https://example.com/jobspy",
+        location="Boston, MA",
+        extra={"is_remote": True},
+    )
+    upsert_postings(db_path, [posting], {posting.url: True})
+
+    conn = get_connection(db_path)
+    row = conn.execute(
+        "SELECT is_remote FROM job_postings WHERE url = ?", (posting.url,)
+    ).fetchone()
+    conn.close()
+    assert row["is_remote"] == 1
+
+
+def test_get_relevant_postings_remote_filter(db_path):
+    remote = _posting("https://example.com/remote-job", title="Remote Bioinformatics Scientist", location="Remote")
+    onsite = _posting("https://example.com/onsite-job", title="Onsite Bioinformatics Scientist", location="Boston, MA")
+    upsert_postings(db_path, [remote, onsite], {remote.url: True, onsite.url: True})
+
+    remote_only = get_relevant_postings(db_path, remote="remote")
+    onsite_only = get_relevant_postings(db_path, remote="onsite")
+    both = get_relevant_postings(db_path)
+
+    assert [p.url for p in remote_only] == [remote.url]
+    assert [p.url for p in onsite_only] == [onsite.url]
+    assert {p.url for p in both} == {remote.url, onsite.url}
 
 
 def test_update_descriptions_persists_and_unblocks_scoring(db_path):

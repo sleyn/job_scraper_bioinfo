@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from job_scraper.db.schema import get_connection
+from job_scraper.filtering.remote_filter import compute_is_remote
 from job_scraper.models import JobPosting
 
 # SQLite's one-argument TRIM strips spaces only, so the character set is given
@@ -18,17 +19,18 @@ LINKEDIN_SOURCE_PATTERN = "jobspy:linkedin%"
 UPSERT_SQL = """
 INSERT INTO job_postings (
     url, raw_id, source, company, title, location, description,
-    posted_date, first_seen_at, last_seen_at, is_relevant, extra_json
+    posted_date, first_seen_at, last_seen_at, is_relevant, extra_json, is_remote
 ) VALUES (
     :url, :raw_id, :source, :company, :title, :location, :description,
-    :posted_date, :now, :now, :is_relevant, :extra_json
+    :posted_date, :now, :now, :is_relevant, :extra_json, :is_remote
 )
 ON CONFLICT(url) DO UPDATE SET
     last_seen_at = excluded.last_seen_at,
     title = excluded.title,
     description = excluded.description,
     location = excluded.location,
-    is_relevant = excluded.is_relevant
+    is_relevant = excluded.is_relevant,
+    is_remote = excluded.is_remote
 """
 
 
@@ -69,6 +71,7 @@ def upsert_postings(
                     "now": now,
                     "is_relevant": int(relevance.get(posting.url, False)),
                     "extra_json": json.dumps(posting.extra),
+                    "is_remote": compute_is_remote(posting),
                 },
             )
             if existed:
@@ -116,6 +119,7 @@ def get_relevant_postings(
     min_score: float | None = None,
     max_score: float | None = None,
     keyword: str | None = None,
+    remote: str | None = None,
 ) -> list[PostingSummary]:
     """Triage list postings, best fit first, per the triage filter set.
 
@@ -126,7 +130,9 @@ def get_relevant_postings(
     `sources` are exact-match allowlists (`IN`); `min_score`/`max_score` bound `score`
     inclusively — since SQLite comparisons against NULL are false, either bound already
     excludes not-yet-scored postings. `keyword` is a case-insensitive substring match on
-    `title`.
+    `title`. `remote` is `"remote"` (is_remote = 1), `"onsite"` (is_remote = 0), or left
+    `None` for no filtering — postings with no remote signal (`is_remote IS NULL`) only
+    ever show up when `remote` is left unfiltered, never under either explicit value.
 
     SQLite sorts NULL below every other value, so `ORDER BY score DESC` already puts
     not-yet-scored postings (score IS NULL) last rather than first, which is what the
@@ -158,6 +164,11 @@ def get_relevant_postings(
         escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         clauses.append("title LIKE :keyword ESCAPE '\\'")
         params["keyword"] = f"%{escaped}%"
+
+    if remote == "remote":
+        clauses.append("is_remote = 1")
+    elif remote == "onsite":
+        clauses.append("is_remote = 0")
 
     where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
