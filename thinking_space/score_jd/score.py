@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.13"
+__generated_with = "0.24.0"
 app = marimo.App()
 
 
@@ -12,13 +12,6 @@ def _(mo):
     I have a set of job descriptions that were scored against my job history using Claude. The idea is to use this set as a training data for a fast NLP model that could score downloaded job descriptions on the fly.
     """)
     return
-
-
-@app.cell
-def _():
-    import marimo as mo
-
-    return (mo,)
 
 
 @app.cell(hide_code=True)
@@ -967,7 +960,7 @@ def _(
 
         def fit_save(self, X, y):
             model = self.fit_model(X, y)
-        
+
             joblib.dump(model, self.output_file_path)
             print(f"Model is saved to {self.output_file_path}")
 
