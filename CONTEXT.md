@@ -29,6 +29,18 @@ features. Scoring runs only on postings where `is_relevant = true` — it is the
 expensive stage after the cheap keyword pre-filter, not an independent full-stream pass.
 _Avoid_: Rating, relevance score, match score.
 
+**Application Status**:
+A user-set field on a posting recording where the user stands with it: `new` (default —
+not yet acted on), `applied` (the user applied to it outside this repo; this repo only
+records the fact, it never submits anything), or `skip` (the user decided not to pursue
+it). Freely reversible via a 3-way toggle — not a one-way workflow action. Set and read
+through the web triage UI (`job_scraper/web/`), never by the scrape/filter/score pipeline.
+Distinct from **Relevance** (a static keyword judgment) and **Score** (a predicted fit
+estimate): both are computed *about* a posting, while Application Status is decided *by*
+the user. `skip` postings are hidden from the triage UI's default view, not deleted —
+resurfaced via an explicit filter.
+_Avoid_: Status (alone — ambiguous with `scrape_runs.error`/run state), Decision, Applied flag.
+
 **Hand-scored JD**:
 A job description the user manually scored 0–100 by reading it against
 `reference/MEMORY.md` and judging fit across four weighted buckets: core technical skills
