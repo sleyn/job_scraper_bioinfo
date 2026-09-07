@@ -1,5 +1,5 @@
 company_name,ats_type,board_identifier,tenant,careers_url,notes,site,wd_subdomain
-10x Genomics,greenhouse,10xgenomics,,https://www.10xgenomics.com/careers,verified 2026-06-22 - 28 jobs,,
+10x Genomics,kula,10xgenomics,,https://careers.kula.ai/10xgenomics,UNVERIFIED 2026-09-06 - moved off Greenhouse to Kula ATS (~25 jobs seen manually); kula not yet supported by job_scraper/ats -- verify_companies.py will SKIP this row until a Kula fetcher exists,,
 Recursion Pharmaceuticals,greenhouse,recursionpharmaceuticals,,https://www.recursion.com/careers,verified 2026-06-22 - 30 jobs,,
 Ginkgo Bioworks,greenhouse,ginkgobioworks,,https://www.ginkgobioworks.com/careers,verified 2026-06-22 - 13 jobs,,
 Generate Biomedicines,greenhouse,generatebiomedicines,,https://generatebiomedicines.com/careers,verified 2026-06-22 - 14 jobs,,
@@ -8,3 +8,9 @@ Deep Genomics,lever,deepgenomics,,https://www.deepgenomics.com/careers/,verified
 Benchling,ashby,benchling,,https://www.benchling.com/careers,verified 2026-09-01 - 49 jobs,,
 Insitro,ashby,insitro,,https://insitro.com/careers/,verified 2026-09-01 - 16 jobs,,
 Illumina,workday,,illumina,https://illumina.wd1.myworkdayjobs.com/illumina-careers,verified 2026-09-01 - 154 jobs,illumina-careers,wd1
+Anthropic,greenhouse,anthropic,,https://job-boards.greenhouse.io/anthropic,verified 2026-09-06 - 591 jobs (AI company; kept for life-sciences/biosafety roles),,
+Axle,greenhouse,axle,,https://job-boards.greenhouse.io/axle,verified 2026-09-06 - 54 jobs,,
+Chan Zuckerberg Biohub,greenhouse,biohub,,https://job-boards.greenhouse.io/biohub,verified 2026-09-06 - 24 jobs,,
+Formation Bio,greenhouse,formationbio,,https://job-boards.greenhouse.io/formationbio,verified 2026-09-06 - 23 jobs,,
+Natera,greenhouse,natera,,https://job-boards.greenhouse.io/natera,verified 2026-09-06 - 215 jobs,,
+Valo Health,greenhouse,valohealth,,https://job-boards.greenhouse.io/valohealth,verified 2026-09-06 - 3 jobs,,
